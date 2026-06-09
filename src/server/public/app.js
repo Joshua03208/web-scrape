@@ -31,9 +31,11 @@ document.querySelectorAll('nav button').forEach((btn) => {
 // --- sites ---
 async function loadSites() {
   const sites = await api('/api/sites');
-  $('#sites-table tbody').innerHTML = sites.map((s) => `
+  $('#sites-table tbody').innerHTML = sites.length === 0
+    ? '<tr><td class="empty" colspan="5">No sites yet — add one below.</td></tr>'
+    : sites.map((s) => `
     <tr>
-      <td>${s.enabled ? '&#x2705;' : '&#x2B1C;'}</td>
+      <td><span class="dot ${s.enabled ? 'on' : 'off'}"></span></td>
       <td>${esc(s.name)}</td>
       <td>${s.strategy === 'prefix_search' ? 'Prefix search' : 'Link crawl'}</td>
       <td>${esc(s.prefixes.join(', '))}</td>
@@ -83,9 +85,10 @@ $('#site-form').addEventListener('submit', async (e) => {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     else await api('/api/sites', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    $('#site-form-error').textContent = '';
     $('#site-form-reset').click();
     loadSites();
-  } catch (err) { alert(err.message); }
+  } catch (err) { $('#site-form-error').textContent = err.message; }
 });
 
 // --- run ---
@@ -94,8 +97,8 @@ $('#run-button').addEventListener('click', async () => {
   try {
     await api('/api/runs', { method: 'POST' });
     $('#run-log').textContent = 'Run started...\n';
-    pollTimer = setInterval(pollRun, 1000);
-  } catch (err) { alert(err.message); }
+    if (!pollTimer) pollTimer = setInterval(pollRun, 1000);
+  } catch (err) { $('#run-log').textContent = `Could not start: ${err.message}`; }
 });
 
 let pollFailures = 0;
@@ -121,8 +124,14 @@ async function pollRun() {
 
 async function loadRuns() {
   const runs = await api('/api/runs');
-  $('#runs-table tbody').innerHTML = runs.map((r) => `
-    <tr><td>#${r.id}</td><td>${esc(r.started_at)}</td><td>${esc(r.status)}</td>
+  const badge = (status) => {
+    const known = ['done', 'failed', 'running'].includes(status) ? status : 'other';
+    return `<span class="badge badge-${known}">${esc(status)}</span>`;
+  };
+  $('#runs-table tbody').innerHTML = runs.length === 0
+    ? '<tr><td class="empty" colspan="4">No runs yet.</td></tr>'
+    : runs.map((r) => `
+    <tr><td>#${r.id}</td><td>${esc(r.started_at)}</td><td>${badge(r.status)}</td>
     <td>${r.site_summaries.map((s) =>
       `site ${s.site_id}: ${s.parts_found} parts, ${s.pages_visited} pages` +
       (s.pages_failed ? `, ${s.pages_failed} failed` : '') +
@@ -143,15 +152,17 @@ function renderResults() {
   const q = $('#results-filter').value.toLowerCase();
   const rows = allResults.filter((r) =>
     !q || r.part_number.toLowerCase().includes(q) || (r.name ?? '').toLowerCase().includes(q));
-  $('#results-table tbody').innerHTML = rows.map((r) => {
+  $('#results-table tbody').innerHTML = rows.length === 0
+    ? `<tr><td class="empty" colspan="7">${allResults.length === 0 ? 'No results yet — start a scrape from the Run tab.' : 'No parts match that filter.'}</td></tr>`
+    : rows.map((r) => {
     const changed = r.prev_price != null && r.prev_price !== r.price;
     return `<tr class="${changed ? 'changed' : ''} ${r.low_confidence ? 'lowconf' : ''}">
       <td>${r.url ? `<a href="${esc(r.url)}" target="_blank">${esc(r.part_number)}</a>` : esc(r.part_number)}</td>
-      <td>${esc(r.name)}${r.low_confidence ? ' &#x26A0;' : ''}</td>
+      <td>${esc(r.name)}${r.low_confidence ? ' <span class="warn">&#x26A0;</span>' : ''}</td>
       <td>${r.currency === 'GBP' ? '&pound;' : esc(r.currency) + ' '}${r.price.toFixed(2)}</td>
       <td>${changed ? `${r.prev_price.toFixed(2)} &rarr; ${r.price.toFixed(2)}` : ''}</td>
       <td>${esc(r.site_name)}</td>
-      <td>${r.in_my_list ? '&#x2714;' : ''}</td>
+      <td>${r.in_my_list ? '<span class="ok">&#x2714;</span>' : ''}</td>
       <td>${esc(r.observed_at)}</td></tr>`;
   }).join('');
 }
