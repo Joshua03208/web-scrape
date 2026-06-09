@@ -53,4 +53,33 @@ describe('executeRun', () => {
     });
     expect(events.some((e) => e.siteName === 'A')).toBe(true);
   });
+
+  it('finishes the run even if onProgress throws', async () => {
+    createSite(db, SITE);
+    const runId = await executeRun(db, {
+      crawlSite: async () => ({ products: [], stats: { pagesVisited: 1, pagesFailed: 0, warnings: [] } }),
+      onProgress: () => { throw new Error('SSE client gone'); },
+    });
+    expect(listRuns(db).find((r) => r.id === runId).status).toBe('done');
+  });
+
+  it('marks the run failed when every site fails', async () => {
+    createSite(db, SITE);
+    const runId = await executeRun(db, { crawlSite: async () => { throw new Error('boom'); } });
+    expect(listRuns(db).find((r) => r.id === runId).status).toBe('failed');
+  });
+
+  it('skips malformed products with a warning instead of failing the site', async () => {
+    createSite(db, SITE);
+    const runId = await executeRun(db, {
+      crawlSite: async () => ({
+        products: [product, { partNumber: '133.9', name: 'bad', price: null, currency: 'GBP', url: 'u', lowConfidence: false }],
+        stats: { pagesVisited: 1, pagesFailed: 0, warnings: [] },
+      }),
+    });
+    expect(latestSnapshot(db)).toHaveLength(1);
+    const run = listRuns(db).find((r) => r.id === runId);
+    expect(run.site_summaries[0].warnings.join(' ')).toContain('malformed');
+    expect(run.status).toBe('done');
+  });
 });

@@ -17,6 +17,9 @@ export async function crawlLinkCrawl(site, { cookies = null, onProgress = () => 
     maxRequestRetries: 2,
     respectRobotsTxtFile: true,
     maxRequestsPerCrawl: site.max_pages,
+    onSkippedRequest: ({ url, reason }) => {
+      stats.warnings.push(`Skipped (${reason}): ${url}`);
+    },
     preNavigationHooks: [
       async ({ page }) => {
         if (cookies?.length) await page.context().addCookies(cookies);
@@ -35,9 +38,9 @@ export async function crawlLinkCrawl(site, { cookies = null, onProgress = () => 
       onProgress({ pagesVisited: stats.pagesVisited, partsFound: products.length });
       await enqueueLinks({ strategy: 'same-domain' });
     },
-    failedRequestHandler: ({ request }) => {
+    failedRequestHandler: ({ request }, err) => {
       stats.pagesFailed += 1;
-      stats.warnings.push(`Page failed: ${request.url}`);
+      stats.warnings.push(`Page failed: ${request.url} — ${err?.message ?? 'unknown error'}`);
     },
   }, config);
 

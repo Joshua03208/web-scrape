@@ -5,7 +5,11 @@ import { buildSearchUrl } from '../extract/pagination.js';
 export async function crawlPrefixSearch(site, { cookies = null, onProgress = () => {} } = {}) {
   const products = [];
   const stats = { pagesVisited: 0, pagesFailed: 0, warnings: [] };
-  const seenUrls = new Set();
+
+  // Per-prefix seenUrls so overlapping prefixes don't prematurely stop each other's pagination
+  const seenByPrefix = new Map();
+  // Site-wide dedup set keyed partNumber|url (used at products.push time)
+  const seenSiteWide = new Set();
 
   // Each crawl gets its own in-memory Configuration so request queues are never shared
   // across sequential runs in the same long-lived process (e.g. Express server). Without
@@ -19,6 +23,10 @@ export async function crawlPrefixSearch(site, { cookies = null, onProgress = () 
     maxConcurrency: 2,
     maxRequestRetries: 2,
     respectRobotsTxtFile: true,
+    maxRequestsPerCrawl: site.max_pages * site.prefixes.length,
+    onSkippedRequest: ({ url, reason }) => {
+      stats.warnings.push(`Skipped (${reason}): ${url}`);
+    },
     preNavigationHooks: [
       async ({ page }) => {
         if (cookies?.length) await page.context().addCookies(cookies);
@@ -29,16 +37,29 @@ export async function crawlPrefixSearch(site, { cookies = null, onProgress = () 
       const { prefix, pageNo } = request.userData;
       const html = await page.content();
       const found = extractListingProducts(html, { prefixes: [prefix], baseUrl: site.base_url });
-      const fresh = found.filter((p) => !seenUrls.has(`${p.partNumber}|${p.url}`));
-      for (const p of fresh) seenUrls.add(`${p.partNumber}|${p.url}`);
-      products.push(...fresh);
+
+      // Per-prefix dedup to decide pagination continuity
+      if (!seenByPrefix.has(prefix)) seenByPrefix.set(prefix, new Set());
+      const prefixSeen = seenByPrefix.get(prefix);
+      const freshForPrefix = found.filter((p) => !prefixSeen.has(`${p.partNumber}|${p.url}`));
+      for (const p of freshForPrefix) prefixSeen.add(`${p.partNumber}|${p.url}`);
+
+      // Site-wide dedup to avoid duplicates across prefixes
+      for (const p of freshForPrefix) {
+        const key = `${p.partNumber}|${p.url}`;
+        if (!seenSiteWide.has(key)) {
+          seenSiteWide.add(key);
+          products.push(p);
+        }
+      }
+
       onProgress({ pagesVisited: stats.pagesVisited, partsFound: products.length });
 
       if (pageNo === 1 && found.length === 0) {
         stats.warnings.push(`No results for prefix ${prefix} — check search pattern or site`);
       }
-      // next page only while this page produced new products
-      if (fresh.length > 0 && pageNo < site.max_pages) {
+      // next page only while this page produced new products (per-prefix freshness)
+      if (freshForPrefix.length > 0 && pageNo < site.max_pages) {
         await crawler.addRequests([{
           url: buildSearchUrl(site.search_url_pattern, site.base_url, prefix, pageNo + 1),
           userData: { prefix, pageNo: pageNo + 1 },
@@ -46,9 +67,9 @@ export async function crawlPrefixSearch(site, { cookies = null, onProgress = () 
         }]);
       }
     },
-    failedRequestHandler: ({ request }) => {
+    failedRequestHandler: ({ request }, err) => {
       stats.pagesFailed += 1;
-      stats.warnings.push(`Page failed: ${request.url}`);
+      stats.warnings.push(`Page failed: ${request.url} — ${err?.message ?? 'unknown error'}`);
     },
   }, config);
 
