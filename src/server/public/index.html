@@ -79,6 +79,21 @@
         </label>
       </div>
       <p id="parts-status"></p>
+      <details id="epos-export" class="panel">
+        <summary>Custom EPOS export</summary>
+        <div class="epos-body">
+          <div class="epos-row">
+            <label>Epos code prefix <input id="epos-prefix" placeholder="FRANKE-"></label>
+            <label>Brand <input id="epos-brand" placeholder="Franke"></label>
+          </div>
+          <p class="hint">RRP = the scraped site price. Each tier below is worked out as a percentage off RRP &mdash; e.g. 15 means 15% off. Use a negative number to price above RRP.</p>
+          <div id="epos-tiers" class="epos-row"></div>
+          <div class="epos-row">
+            <button type="button" id="epos-download">Download EPOS CSV</button>
+            <span class="hint" id="epos-scope"></span>
+          </div>
+        </div>
+      </details>
       <div id="prefix-chips" class="chips"></div>
       <p id="results-count" class="results-count"></p>
       <table id="results-table">

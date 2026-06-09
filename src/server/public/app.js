@@ -172,14 +172,19 @@ async function loadResults() {
   $('#missing-parts summary').textContent = `My parts not found on any site (${missing.length})`;
 }
 
-function renderResults() {
+function filteredRows() {
   const q = $('#results-filter').value.toLowerCase();
-  const rows = allResults.filter((r) =>
+  return allResults.filter((r) =>
     (!activePrefix || prefixOf(r.part_number) === activePrefix) &&
     (!q || r.part_number.toLowerCase().includes(q) || (r.name ?? '').toLowerCase().includes(q)));
+}
+
+function renderResults() {
+  const rows = filteredRows();
   $('#results-count').textContent = allResults.length
     ? `Showing ${rows.length} of ${allResults.length} parts${activePrefix ? ` in ${activePrefix}` : ''}`
     : '';
+  $('#epos-scope').textContent = `Exports the ${rows.length} part(s) currently shown${activePrefix ? ` (${activePrefix} category)` : ''}.`;
   $('#results-table tbody').innerHTML = rows.length === 0
     ? `<tr><td class="empty" colspan="7">${allResults.length === 0 ? 'No results yet — start a scrape from the Run tab.' : 'No parts match that filter.'}</td></tr>`
     : rows.map((r) => {
@@ -195,6 +200,60 @@ function renderResults() {
   }).join('');
 }
 $('#results-filter').addEventListener('input', renderResults);
+
+// --- custom EPOS export ---
+const EPOS_TIERS = ['COST', 'WEBSITE', 'TRADE', 'ENGINEER', 'MERCHANT', 'STAFF', 'AMAZON', 'EBAY'];
+
+function eposSettings() {
+  try { return JSON.parse(localStorage.getItem('eposSettings')) ?? {}; } catch { return {}; }
+}
+function saveEposSettings() {
+  const s = { prefix: $('#epos-prefix').value, brand: $('#epos-brand').value, tiers: {} };
+  for (const t of EPOS_TIERS) s.tiers[t] = $(`#epos-tier-${t}`).value;
+  localStorage.setItem('eposSettings', JSON.stringify(s));
+}
+
+function initEpos() {
+  const s = eposSettings();
+  $('#epos-prefix').value = s.prefix ?? 'FRANKE-';
+  $('#epos-brand').value = s.brand ?? 'Franke';
+  $('#epos-tiers').innerHTML = EPOS_TIERS.map((t) =>
+    `<label>${t} % off <input id="epos-tier-${t}" type="number" step="0.1" value="${esc(s.tiers?.[t] ?? '0')}"></label>`).join('');
+  $('#epos-export').querySelectorAll('input').forEach((i) => i.addEventListener('change', saveEposSettings));
+}
+
+function eposCsvCell(value) {
+  let s = String(value ?? '');
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+}
+
+$('#epos-download').addEventListener('click', () => {
+  const rows = filteredRows();
+  if (rows.length === 0) { $('#epos-scope').textContent = 'Nothing to export — adjust the filter.'; return; }
+  const prefix = $('#epos-prefix').value.trim();
+  const brand = $('#epos-brand').value.trim();
+  const pct = {};
+  for (const t of EPOS_TIERS) pct[t] = Number($(`#epos-tier-${t}`).value) || 0;
+  const header = ['Epos Code', 'Description', 'RRP', ...EPOS_TIERS, 'Brand', 'RowStatus'];
+  const lines = [header.join(',')];
+  for (const r of rows) {
+    const desc = `${brand ? brand + ' ' : ''}${r.name ?? ''} - ${r.part_number}`.trim();
+    const tiers = EPOS_TIERS.map((t) => (r.price * (1 - pct[t] / 100)).toFixed(2));
+    lines.push([
+      eposCsvCell(`${prefix}${r.part_number}`), eposCsvCell(desc), r.price.toFixed(2),
+      ...tiers, eposCsvCell(brand), '',
+    ].join(','));
+  }
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `epos-export${activePrefix ? '-' + activePrefix.replace(/\.$/, '') : ''}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+initEpos();
 
 $('#parts-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
