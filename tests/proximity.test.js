@@ -33,4 +33,32 @@ describe('extractPairsByProximity', () => {
       <script>var x = "133.9999.999 £1.00";</script></body></html>`;
     expect(extractPairsByProximity(html, opts)).toEqual([]);
   });
+
+  // Regression test 5: two-row table where second row has POA (no price) —
+  // both parts share the only price token, so both should be lowConfidence.
+  it('flags both parts as lowConfidence when they share the same price token', () => {
+    const html = `<html><head><title>T</title></head><body>
+      <table>
+        <tr><td>133.0001.111</td><td>£10.00</td></tr>
+        <tr><td>133.0002.222</td><td>POA</td></tr>
+      </table></body></html>`;
+    const pairs = extractPairsByProximity(html, opts);
+    expect(pairs).toHaveLength(2);
+    expect(pairs.find((p) => p.partNumber === '133.0001.111').lowConfidence).toBe(true);
+    expect(pairs.find((p) => p.partNumber === '133.0002.222').lowConfidence).toBe(true);
+  });
+
+  // Regression test 6: same part appearing twice (e.g. breadcrumb + table) with the
+  // same nearest price should be deduped to a single pair.
+  it('dedupes identical partNumber|price pairs', () => {
+    const html = `<html><head><title>T</title></head><body>
+      <nav>133.0001.111</nav>
+      <table>
+        <tr><td>133.0001.111</td><td>£10.00</td></tr>
+      </table></body></html>`;
+    const pairs = extractPairsByProximity(html, opts);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].partNumber).toBe('133.0001.111');
+    expect(pairs[0].price).toBe(10);
+  });
 });

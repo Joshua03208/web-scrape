@@ -23,4 +23,11 @@ describe('buildPartNumberRegex', () => {
   it('does not match when prefix is inside a longer number', () => {
     expect('5133.0440.351'.match(re)).toBeNull();
   });
+  it('does not match a price that starts with the prefix digits', () => {
+    expect('£133.50'.match(re)).toBeNull();
+    expect('£ 133.50'.match(re)).toBeNull();
+  });
+  it('still matches a part number after a colon or space', () => {
+    expect('Product Code: 133.0008.411'.match(re)[0]).toBe('133.0008.411');
+  });
 });

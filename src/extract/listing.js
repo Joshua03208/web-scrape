@@ -2,6 +2,18 @@ import * as cheerio from 'cheerio';
 import { findAllPrices } from './price.js';
 import { buildPartNumberRegex } from './partNumber.js';
 
+// Fix 3: robust URL resolution — skips garbage hrefs and javascript: URLs.
+function resolveUrl(href, baseUrl) {
+  if (!href) return null;
+  try {
+    const u = new URL(href, baseUrl);
+    if (u.protocol === 'http:' || u.protocol === 'https:') return u.href;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function extractListingProducts(html, { prefixes, baseUrl }) {
   const $ = cheerio.load(html);
   $('script,style,noscript').remove();
@@ -10,6 +22,10 @@ export function extractListingProducts(html, { prefixes, baseUrl }) {
   const products = [];
   const seen = new Set();
 
+  // Fix 2 helpers
+  const countParts = (txt) => (txt.match(new RegExp(partRe.source, 'gi')) ?? []).length;
+  const countPrices = (txt) => findAllPrices(txt).length;
+
   $('body *').each((_, el) => {
     const $el = $(el);
     const ownText = $el.clone().children().remove().end().text();
@@ -17,13 +33,18 @@ export function extractListingProducts(html, { prefixes, baseUrl }) {
     if (!m) return;
     const partNumber = m[0];
 
-    // Expand to the product card: largest ancestor with only this part number.
+    // Fix 2: expand to the product card with tighter rules.
     let $card = $el;
     while (true) {
       const $parent = $card.parent();
       if (!$parent.length || $parent.is('body,html')) break;
-      const distinct = new Set($parent.text().match(partReG) ?? []);
+      const parentTxt = $parent.text();
+      const cardTxt = $card.text();
+      const distinct = new Set(parentTxt.match(partReG) ?? []);
       if (distinct.size > 1) break;
+      const cardHasPrice = countPrices(cardTxt) > 0;
+      if (cardHasPrice && countParts(parentTxt) > countParts(cardTxt)) break;
+      if (cardHasPrice && countPrices(parentTxt) > countPrices(cardTxt)) break;
       $card = $parent;
     }
 
@@ -40,11 +61,17 @@ export function extractListingProducts(html, { prefixes, baseUrl }) {
       .first();
     const name = $name.text().trim() || null;
 
-    const href =
-      ($name.is('a') ? $name.attr('href') : null) ??
-      $name.closest('a').attr('href') ??
-      $card.find('a[href]').first().attr('href');
-    const url = href ? new URL(href, baseUrl).href : null;
+    // Fix 3: try candidates in order, skip failures and javascript: hrefs.
+    const hrefCandidates = [
+      $name.is('a') ? $name.attr('href') : null,
+      $name.closest('a').attr('href'),
+      $card.find('a[href]').first().attr('href'),
+    ];
+    let url = null;
+    for (const href of hrefCandidates) {
+      const resolved = resolveUrl(href, baseUrl);
+      if (resolved) { url = resolved; break; }
+    }
 
     const key = `${partNumber}|${url}`;
     if (seen.has(key)) return;

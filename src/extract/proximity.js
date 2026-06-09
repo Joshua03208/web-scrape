@@ -29,7 +29,8 @@ export function extractPairsByProximity(html, { prefixes, pageUrl }) {
 
   if (prices.length === 0) return [];
 
-  return parts.map(({ value, pos: partPos }) => {
+  // First pass: assign each part its nearest price (existing logic, unchanged).
+  const assignments = parts.map(({ value, pos: partPos }) => {
     // Sort by absolute distance; on tie prefer prices after the part number.
     const byDistance = [...prices].sort((a, b) => {
       const da = Math.abs(a.pos - partPos);
@@ -68,6 +69,34 @@ export function extractPairsByProximity(html, { prefixes, pageUrl }) {
       currency: nearest.currency,
       url: pageUrl,
       lowConfidence,
+      _pricePos: nearest.pos, // internal; removed before return
     };
   });
+
+  // Fix 4a: shared-price flagging — if two parts share the same price token position,
+  // set lowConfidence=true on both.
+  const pricePosCounts = new Map();
+  for (const a of assignments) {
+    pricePosCounts.set(a._pricePos, (pricePosCounts.get(a._pricePos) ?? 0) + 1);
+  }
+  for (const a of assignments) {
+    if (pricePosCounts.get(a._pricePos) > 1) {
+      a.lowConfidence = true;
+    }
+  }
+
+  // Strip internal field.
+  for (const a of assignments) delete a._pricePos;
+
+  // Fix 4b: dedupe on partNumber|price.
+  const seen = new Set();
+  const result = [];
+  for (const a of assignments) {
+    const key = `${a.partNumber}|${a.price}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(a);
+  }
+
+  return result;
 }
