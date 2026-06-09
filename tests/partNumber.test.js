@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { normalisePartNumber, buildPartNumberRegex } from '../src/extract/partNumber.js';
 
 describe('normalisePartNumber', () => {
-  it('uppercases and strips spaces and dashes', () => {
-    expect(normalisePartNumber('133.0440-351 a')).toBe('133.0440351A');
+  it('uppercases and strips spaces, dashes and dots', () => {
+    expect(normalisePartNumber('133.0440-351 a')).toBe('1330440351A');
+    expect(normalisePartNumber('133.0440.351')).toBe('1330440351');
   });
 });
 

@@ -1,4 +1,5 @@
 const SYMBOLS = { '£': 'GBP', '$': 'USD', '€': 'EUR' };
+// /g regex: only safe with matchAll — never call .test()/.exec() on it (lastIndex drift)
 const PRICE_RE = /(£|\$|€)\s*(\d[\d,]*(?:\.\d{1,2})?)|(\d[\d,]*(?:\.\d{1,2})?)\s*(GBP|USD|EUR)\b/gi;
 
 function toMatch(m) {

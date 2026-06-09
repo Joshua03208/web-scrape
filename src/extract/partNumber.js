@@ -1,5 +1,5 @@
 export function normalisePartNumber(raw) {
-  return String(raw).toUpperCase().replace(/[\s\-]/g, '');
+  return String(raw).toUpperCase().replace(/[\s\-.]/g, '');
 }
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
