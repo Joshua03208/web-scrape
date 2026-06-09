@@ -1,0 +1,90 @@
+<!-- src/server/public/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Price Scraper</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Price Scraper</h1>
+    <nav>
+      <button data-tab="sites" class="active">Sites</button>
+      <button data-tab="run">Run</button>
+      <button data-tab="results">Results</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="tab-sites">
+      <h2>Sites</h2>
+      <table id="sites-table">
+        <thead><tr><th>On</th><th>Name</th><th>Strategy</th><th>Prefixes</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <h3 id="site-form-title">Add site</h3>
+      <form id="site-form">
+        <input type="hidden" name="site_id">
+        <label>Name <input name="name" required></label>
+        <label>Base URL <input name="base_url" type="url" required placeholder="https://example.co.uk/"></label>
+        <label>Strategy
+          <select name="strategy">
+            <option value="prefix_search">Prefix search</option>
+            <option value="link_crawl">Crawl all links</option>
+          </select>
+        </label>
+        <label>Search URL pattern
+          <input name="search_url_pattern" placeholder="index.php?route=product/search&amp;search={query}&amp;page={page}">
+        </label>
+        <label>Prefixes (comma separated) <input name="prefixes" placeholder="112., 113., 133."></label>
+        <label>Max pages <input name="max_pages" type="number" value="200"></label>
+        <fieldset>
+          <legend>Dealer login (optional)</legend>
+          <label>Login URL <input name="login_url"></label>
+          <label>Username <input name="username" autocomplete="off"></label>
+          <label>Password <input name="password" type="password" autocomplete="off"></label>
+        </fieldset>
+        <label><input type="checkbox" name="enabled" checked> Enabled</label>
+        <button type="submit">Save site</button>
+        <button type="button" id="site-form-reset">Clear</button>
+      </form>
+    </section>
+
+    <section id="tab-run" hidden>
+      <h2>Run</h2>
+      <button id="run-button">&#9654; Run now</button>
+      <pre id="run-log"></pre>
+      <h3>Past runs</h3>
+      <table id="runs-table">
+        <thead><tr><th>Run</th><th>Started</th><th>Status</th><th>Summary</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="tab-results" hidden>
+      <h2>Results</h2>
+      <div class="toolbar">
+        <input id="results-filter" placeholder="Filter by part number or name...">
+        <a href="/api/export/latest.csv">Export CSV</a>
+        <a href="/api/export/latest.xlsx">Export Excel</a>
+        <a href="/api/export/history.csv">Export full history</a>
+        <label class="upload">Upload my parts list
+          <input type="file" id="parts-file" accept=".csv,.xlsx" hidden>
+        </label>
+      </div>
+      <p id="parts-status"></p>
+      <table id="results-table">
+        <thead><tr>
+          <th>Part Number</th><th>Name</th><th>Price</th><th>Change</th>
+          <th>Site</th><th>Mine</th><th>Last seen</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <details id="missing-parts"><summary>My parts not found on any site</summary><ul></ul></details>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
