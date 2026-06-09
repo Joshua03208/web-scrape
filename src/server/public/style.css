@@ -174,6 +174,19 @@ legend { font-size: 0.74rem; color: var(--faint); padding: 0 0.4rem; }
 .toolbar a:hover, .upload:hover { border-color: var(--faint); text-decoration: none; }
 #parts-status { font-size: 0.82rem; color: var(--muted); min-height: 1.2em; margin: 0.6rem 0 0; }
 
+.chips { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.9rem; }
+.chip {
+  font-size: 0.8rem; font-weight: 500; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 0.32rem 0.75rem; border-radius: 999px;
+  cursor: pointer; transition: border-color 0.18s, color 0.18s, background 0.18s;
+}
+.chip span { color: var(--faint); font-variant-numeric: tabular-nums; margin-left: 0.25rem; }
+.chip:hover { color: var(--text); border-color: var(--faint); }
+.chip.active { color: var(--accent-strong); background: var(--accent-soft); border-color: rgba(224, 104, 92, 0.35); }
+.chip.active span { color: var(--accent-strong); opacity: 0.7; }
+.results-count { font-size: 0.78rem; color: var(--faint); margin: 0.7rem 0 0; }
+
 #missing-parts { margin-top: 1.25rem; font-size: 0.85rem; color: var(--muted); }
 #missing-parts summary { cursor: pointer; transition: color 0.18s; }
 #missing-parts summary:hover { color: var(--text); }

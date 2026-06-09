@@ -140,8 +140,32 @@ async function loadRuns() {
 
 // --- results ---
 let allResults = [];
+let activePrefix = null; // null = all categories
+
+const prefixOf = (pn) => (pn.match(/^[^.]*\./) ?? [pn.slice(0, 4)])[0];
+
+function renderPrefixChips() {
+  const counts = new Map();
+  for (const r of allResults) {
+    const p = prefixOf(r.part_number);
+    counts.set(p, (counts.get(p) ?? 0) + 1);
+  }
+  if (activePrefix && !counts.has(activePrefix)) activePrefix = null;
+  const chips = [[null, allResults.length], ...[...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]))];
+  $('#prefix-chips').innerHTML = chips.map(([p, n]) =>
+    `<button class="chip ${p === activePrefix ? 'active' : ''}" data-prefix="${esc(p ?? '')}">
+      ${p ? esc(p) : 'All'} <span>${n}</span></button>`).join('');
+  $('#prefix-chips').querySelectorAll('.chip').forEach((c) =>
+    c.addEventListener('click', () => {
+      activePrefix = c.dataset.prefix || null;
+      renderPrefixChips();
+      renderResults();
+    }));
+}
+
 async function loadResults() {
   allResults = await api('/api/results');
+  renderPrefixChips();
   renderResults();
   const missing = await api('/api/parts/missing');
   $('#missing-parts ul').innerHTML = missing.map((m) => `<li>${esc(m.part_number)}</li>`).join('');
@@ -151,7 +175,11 @@ async function loadResults() {
 function renderResults() {
   const q = $('#results-filter').value.toLowerCase();
   const rows = allResults.filter((r) =>
-    !q || r.part_number.toLowerCase().includes(q) || (r.name ?? '').toLowerCase().includes(q));
+    (!activePrefix || prefixOf(r.part_number) === activePrefix) &&
+    (!q || r.part_number.toLowerCase().includes(q) || (r.name ?? '').toLowerCase().includes(q)));
+  $('#results-count').textContent = allResults.length
+    ? `Showing ${rows.length} of ${allResults.length} parts${activePrefix ? ` in ${activePrefix}` : ''}`
+    : '';
   $('#results-table tbody').innerHTML = rows.length === 0
     ? `<tr><td class="empty" colspan="7">${allResults.length === 0 ? 'No results yet — start a scrape from the Run tab.' : 'No parts match that filter.'}</td></tr>`
     : rows.map((r) => {
