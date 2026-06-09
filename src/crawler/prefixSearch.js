@@ -58,11 +58,15 @@ export async function crawlPrefixSearch(site, { cookies = null, onProgress = () 
       if (pageNo === 1 && found.length === 0) {
         stats.warnings.push(`No results for prefix ${prefix} — check search pattern or site`);
       }
-      // next page only while this page produced new products (per-prefix freshness)
-      if (freshForPrefix.length > 0 && pageNo < site.max_pages) {
+      // Keep paginating while pages still contain products. Some shops repeat
+      // products across pages (unstable sort), so a single all-duplicates page must
+      // not end the prefix — only stop after 2 consecutive pages with nothing new,
+      // or a genuinely empty page. max_pages stays the hard cap either way.
+      const noFreshStreak = freshForPrefix.length > 0 ? 0 : (request.userData.noFreshStreak ?? 0) + 1;
+      if (found.length > 0 && noFreshStreak < 2 && pageNo < site.max_pages) {
         await crawler.addRequests([{
           url: buildSearchUrl(site.search_url_pattern, site.base_url, prefix, pageNo + 1),
-          userData: { prefix, pageNo: pageNo + 1 },
+          userData: { prefix, pageNo: pageNo + 1, noFreshStreak },
           uniqueKey: `${site.id}:${prefix}:${pageNo + 1}`,
         }]);
       }
