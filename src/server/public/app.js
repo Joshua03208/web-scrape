@@ -16,7 +16,14 @@ document.querySelectorAll('nav button').forEach((btn) => {
     document.querySelectorAll('main section').forEach((s) => (s.hidden = true));
     $(`#tab-${btn.dataset.tab}`).hidden = false;
     if (btn.dataset.tab === 'results') loadResults();
-    if (btn.dataset.tab === 'run') loadRuns();
+    if (btn.dataset.tab === 'run') {
+      loadRuns();
+      api('/api/runs/current').then((cur) => {
+        if (cur && cur.running && !pollTimer) {
+          pollTimer = setInterval(pollRun, 1000);
+        }
+      }).catch(() => {});
+    }
     if (btn.dataset.tab === 'sites') loadSites();
   });
 });
@@ -91,14 +98,25 @@ $('#run-button').addEventListener('click', async () => {
   } catch (err) { alert(err.message); }
 });
 
+let pollFailures = 0;
 async function pollRun() {
-  const cur = await api('/api/runs/current');
-  $('#run-log').textContent = cur.events.map((e) =>
-    e.phase === 'crawling'
-      ? `[${e.siteName}] pages: ${e.pagesVisited}, parts: ${e.partsFound}`
-      : `[${e.siteName ?? 'run'}] ${e.phase}${e.error ? ': ' + e.error : ''}${e.partsFound != null ? ` (${e.partsFound} parts)` : ''}`
-  ).join('\n');
-  if (!cur.running) { clearInterval(pollTimer); $('#run-log').textContent += '\nFinished.'; loadRuns(); }
+  try {
+    const cur = await api('/api/runs/current');
+    pollFailures = 0;
+    $('#run-log').textContent = cur.events.map((e) =>
+      e.phase === 'crawling'
+        ? `[${e.siteName}] pages: ${e.pagesVisited}, parts: ${e.partsFound}`
+        : `[${e.siteName ?? 'run'}] ${e.phase}${e.error ? ': ' + e.error : ''}${e.partsFound != null ? ` (${e.partsFound} parts)` : ''}`
+    ).join('\n');
+    if (!cur.running) { clearInterval(pollTimer); pollTimer = null; $('#run-log').textContent += '\nFinished.'; loadRuns(); }
+  } catch (err) {
+    pollFailures += 1;
+    if (pollFailures >= 5) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      $('#run-log').textContent += '\nLost connection to server.';
+    }
+  }
 }
 
 async function loadRuns() {
@@ -128,7 +146,7 @@ function renderResults() {
   $('#results-table tbody').innerHTML = rows.map((r) => {
     const changed = r.prev_price != null && r.prev_price !== r.price;
     return `<tr class="${changed ? 'changed' : ''} ${r.low_confidence ? 'lowconf' : ''}">
-      <td><a href="${esc(r.url)}" target="_blank">${esc(r.part_number)}</a></td>
+      <td>${r.url ? `<a href="${esc(r.url)}" target="_blank">${esc(r.part_number)}</a>` : esc(r.part_number)}</td>
       <td>${esc(r.name)}${r.low_confidence ? ' &#x26A0;' : ''}</td>
       <td>${r.currency === 'GBP' ? '&pound;' : esc(r.currency) + ' '}${r.price.toFixed(2)}</td>
       <td>${changed ? `${r.prev_price.toFixed(2)} &rarr; ${r.price.toFixed(2)}` : ''}</td>
@@ -149,6 +167,7 @@ $('#parts-file').addEventListener('change', async (e) => {
     $('#parts-status').textContent = `Parts list uploaded: ${out.count} part numbers.`;
     loadResults();
   } catch (err) { $('#parts-status').textContent = `Upload failed: ${err.message}`; }
+  e.target.value = '';
 });
 
 loadSites();
