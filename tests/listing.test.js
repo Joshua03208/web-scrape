@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { readFileSync, existsSync } from 'node:fs';
 import { extractListingProducts } from '../src/extract/listing.js';
 
 const html = readFileSync('tests/fixtures/opencart-search.html', 'utf8');
@@ -134,5 +134,41 @@ describe('extractListingProducts', () => {
     expect(() => { products = extractListingProducts(brokenHtml, opts); }).not.toThrow();
     expect(products).toHaveLength(1);
     expect(products[0].url).toBeNull();
+  });
+});
+
+// Real-fixture test — only runs when the fixture has been saved by scripts/smoke.mjs
+const REAL_FIXTURE = 'tests/fixtures/central-real-search.html';
+const hasRealFixture = existsSync(REAL_FIXTURE);
+
+describe.skipIf(!hasRealFixture)('extractListingProducts — real central-servicesuk.co.uk page', () => {
+  let products;
+  beforeAll(() => {
+    const html = readFileSync(REAL_FIXTURE, 'utf8');
+    products = extractListingProducts(html, { prefixes: ['133.'], baseUrl: 'https://central-servicesuk.co.uk/' });
+  });
+
+  it('extracts at least 5 products from the real search page', () => {
+    expect(products.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('all products have a 133. part number', () => {
+    for (const p of products) {
+      expect(p.partNumber).toMatch(/^133\./);
+    }
+  });
+
+  it('all products have a positive GBP price', () => {
+    for (const p of products) {
+      expect(p.currency).toBe('GBP');
+      expect(p.price).toBeGreaterThan(0);
+    }
+  });
+
+  it('all products have a name and an absolute URL', () => {
+    for (const p of products) {
+      expect(p.name).toBeTruthy();
+      expect(p.url).toMatch(/^https:\/\/central-servicesuk\.co\.uk\//);
+    }
   });
 });
