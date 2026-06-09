@@ -43,7 +43,7 @@ describe('runs API', () => {
   it('POST /api/runs starts a run and progress is queryable', async () => {
     createSite(db, SITE);
     const started = await request(app).post('/api/runs').expect(202);
-    expect(started.body.runId).toBeDefined();
+    expect(started.body.started).toBe(true);
     // wait for the in-process run to finish
     await new Promise((r) => setTimeout(r, 100));
     const status = await request(app).get('/api/runs/current').expect(200);
@@ -105,5 +105,47 @@ describe('my parts API', () => {
       .expect(200);
     const missing = await request(app).get('/api/parts/missing').expect(200);
     expect(missing.body).toEqual([{ part_number: '112.9' }]);
+  });
+  // Fix 2: unsupported file type
+  it('rejects an .xls upload without touching the parts list', async () => {
+    await request(app).post('/api/parts')
+      .attach('file', Buffer.from('\xd0\xcf\x11\xe0junk'), 'parts.xls').expect(400);
+  });
+  // Fix 2: empty file
+  it('rejects an empty file', async () => {
+    await request(app).post('/api/parts').attach('file', Buffer.from(''), 'parts.csv').expect(400);
+  });
+  // Fix 4: oversized upload returns JSON 400
+  it('returns json 400 for an oversized upload', async () => {
+    await request(app).post('/api/parts')
+      .attach('file', Buffer.alloc(11 * 1024 * 1024, 97), 'parts.csv').expect(400)
+      .then((res) => expect(res.body.error).toBeTruthy());
+  });
+});
+
+describe('sites API — edge cases', () => {
+  // Fix 3: no body → 400 not 500
+  it('returns 400 (not 500) when no body is posted', async () => {
+    await request(app).post('/api/sites').expect(400);
+  });
+  // Fix 6: PUT to nonexistent site → 404
+  it('404s on PUT to a nonexistent site', async () => {
+    await request(app).put('/api/sites/999').send(SITE).expect(404);
+  });
+});
+
+describe('runs API — state machine', () => {
+  // Fix 5: runId is null at the start of a new run
+  it('clears the previous runId when a new run starts', async () => {
+    createSite(db, SITE);
+    await request(app).post('/api/runs').expect(202);
+    await new Promise((r) => setTimeout(r, 100));
+    const first = await request(app).get('/api/runs/current');
+    expect(first.body.runId).not.toBeNull();
+    // start second run with a never-resolving executor
+    app = createApp(db, { runExecutor: () => new Promise(() => {}) });
+    await request(app).post('/api/runs').expect(202);
+    const second = await request(app).get('/api/runs/current');
+    expect(second.body.runId).toBeNull();
   });
 });

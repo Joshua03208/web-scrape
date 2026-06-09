@@ -37,4 +37,11 @@ describe('rowsToXlsxBuffer', () => {
     expect(ws.getCell('A2').value).toBe('133.0440.351');
     expect(ws.getCell('C3').value).toBe(17.63);
   });
+  // Fix 8: formula-injection guard
+  it('neutralises formula-injection in xlsx cells', async () => {
+    const buf = await rowsToXlsxBuffer([{ part_number: '=SUM(A1:A9)', name: 'ok', price: 1 }], columns);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    expect(wb.worksheets[0].getCell('A2').value).toBe("'=SUM(A1:A9)");
+  });
 });

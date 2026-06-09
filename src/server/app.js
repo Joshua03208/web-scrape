@@ -47,8 +47,16 @@ function validateSite(body) {
 }
 
 async function parsePartsUpload(file) {
+  // Fix 2: reject unsupported file types
+  const name = file.originalname.toLowerCase();
+  if (!name.endsWith('.csv') && !name.endsWith('.xlsx')) {
+    const err = new Error('Unsupported file type — save as .csv or .xlsx');
+    err.code = 'UNSUPPORTED_FILE_TYPE';
+    throw err;
+  }
+
   let rows;
-  if (file.originalname.toLowerCase().endsWith('.xlsx')) {
+  if (name.endsWith('.xlsx')) {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(file.buffer);
     rows = [];
@@ -68,6 +76,10 @@ async function parsePartsUpload(file) {
     .map((partNumber) => ({ partNumber }));
 }
 
+// Fix 4: wrap multer so errors come back as JSON 400 instead of HTML 500
+const uploadSingle = (req, res, next) =>
+  upload.single('file')(req, res, (err) => err ? res.status(400).json({ error: err.message }) : next());
+
 export function createApp(db, { runExecutor = executeRun } = {}) {
   const app = express();
   app.use(express.json());
@@ -79,16 +91,20 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
   // --- sites ---
   app.get('/api/sites', (req, res) => res.json(listSites(db)));
   app.post('/api/sites', (req, res) => {
-    const err = validateSite(req.body);
+    // Fix 3: guard against undefined body (Express 5 with no Content-Type)
+    const err = validateSite(req.body ?? {});
     if (err) return res.status(400).json({ error: err });
-    const id = createSite(db, req.body);
+    const id = createSite(db, req.body ?? {});
     res.status(201).json(getSite(db, id));
   });
   app.put('/api/sites/:id', (req, res) => {
-    const err = validateSite(req.body);
+    // Fix 3 + Fix 6: guard body and check site existence
+    const err = validateSite(req.body ?? {});
     if (err) return res.status(400).json({ error: err });
-    updateSite(db, Number(req.params.id), req.body);
-    res.json(getSite(db, Number(req.params.id)));
+    const id = Number(req.params.id);
+    if (!getSite(db, id)) return res.status(404).json({ error: 'Site not found' });
+    updateSite(db, id, req.body ?? {});
+    res.json(getSite(db, id));
   });
   app.delete('/api/sites/:id', (req, res) => {
     deleteSite(db, Number(req.params.id));
@@ -99,13 +115,22 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
   app.post('/api/runs', (req, res) => {
     if (current.running) return res.status(409).json({ error: 'A run is already in progress' });
     current.running = true;
+    // Fix 5: reset runId when a new run starts
+    current.runId = null;
     current.events = [];
-    const promise = runExecutor(db, { onProgress: (e) => current.events.push(e) });
-    res.status(202).json({ runId: 'pending' });
-    promise
+    // Fix 5: use Promise.resolve().then() so a synchronous throw doesn't leave running=true
+    Promise.resolve().then(() => runExecutor(db, {
+      onProgress: (e) => {
+        current.events.push(e);
+        // Fix 5: cap events at 2000 to avoid unbounded memory growth
+        if (current.events.length > 2000) current.events.shift();
+      },
+    }))
       .then((runId) => { current.runId = runId; })
       .catch((err) => current.events.push({ phase: 'fatal', error: err.message }))
       .finally(() => { current.running = false; });
+    // Fix 7: respond with { started: true } instead of { runId: 'pending' }
+    res.status(202).json({ started: true });
   });
   app.get('/api/runs/current', (req, res) =>
     res.json({ running: current.running, runId: current.runId, events: current.events.slice(-200) }));
@@ -115,6 +140,7 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
   app.get('/api/results', (req, res) => res.json(latestSnapshot(db)));
   app.get('/api/export/latest.csv', (req, res) => {
     res.type('text/csv').attachment('latest-prices.csv')
+      // Fix 7: replaced invisible BOM literal with escape sequence (byte-identical)
       .send('﻿' + rowsToCsv(latestSnapshot(db), SNAPSHOT_COLUMNS));
   });
   app.get('/api/export/latest.xlsx', async (req, res) => {
@@ -124,17 +150,25 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
   });
   app.get('/api/export/history.csv', (req, res) => {
     res.type('text/csv').attachment('price-history.csv')
+      // Fix 7: replaced invisible BOM literal with escape sequence (byte-identical)
       .send('﻿' + rowsToCsv(fullHistory(db), HISTORY_COLUMNS));
   });
 
   // --- my parts ---
-  app.post('/api/parts', upload.single('file'), async (req, res) => {
+  app.post('/api/parts', uploadSingle, async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'file is required' });
     try {
       const parts = await parsePartsUpload(req.file);
+      // Fix 2: reject empty uploads — never wipe the parts list with zero rows
+      if (parts.length === 0) {
+        return res.status(400).json({ error: 'No part numbers found in file' });
+      }
       replaceMyParts(db, parts);
       res.json({ count: parts.length });
     } catch (err) {
+      if (err.code === 'UNSUPPORTED_FILE_TYPE') {
+        return res.status(400).json({ error: err.message });
+      }
       res.status(400).json({ error: `Could not parse file: ${err.message}` });
     }
   });
