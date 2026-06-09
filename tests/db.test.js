@@ -80,3 +80,72 @@ describe('my parts list', () => {
     expect(missingMyParts(db)).toEqual([{ part_number: '112.9999.000' }]);
   });
 });
+
+describe('runs and observations — deduplication', () => {
+  it('ignores within-run duplicates for prev_price', () => {
+    const siteId = createSite(db, SITE);
+    const run1 = createRun(db);
+    insertObservations(db, run1, siteId, [
+      { partNumber: '133.1', name: 'V', price: 10, currency: 'GBP', url: 'a', lowConfidence: false },
+    ]);
+    finishRun(db, run1, 'done');
+    const run2 = createRun(db);
+    insertObservations(db, run2, siteId, [
+      { partNumber: '133.1', name: 'V', price: 12, currency: 'GBP', url: 'a', lowConfidence: false },
+      { partNumber: '133.1', name: 'V', price: 12, currency: 'GBP', url: 'b', lowConfidence: false },
+    ]);
+    finishRun(db, run2, 'done');
+    const [row] = latestSnapshot(db);
+    expect(row.price).toBe(12);
+    expect(row.prev_price).toBe(10); // not masked by run2's duplicate
+  });
+  it('reports null prev_price on the first run even with duplicates', () => {
+    const siteId = createSite(db, SITE);
+    const run1 = createRun(db);
+    insertObservations(db, run1, siteId, [
+      { partNumber: '133.2', name: 'V', price: 20, currency: 'GBP', url: 'a', lowConfidence: false },
+      { partNumber: '133.2', name: 'V', price: 19.5, currency: 'GBP', url: 'b', lowConfidence: false },
+    ]);
+    finishRun(db, run1, 'done');
+    const [row] = latestSnapshot(db);
+    expect(row.prev_price).toBeNull();
+  });
+});
+
+describe('deleteSite cascade', () => {
+  it('deletes a site with crawl history (cascades)', () => {
+    const siteId = createSite(db, SITE);
+    const run = createRun(db);
+    insertObservations(db, run, siteId, [
+      { partNumber: '133.3', name: 'V', price: 1, currency: 'GBP', url: 'u', lowConfidence: false },
+    ]);
+    saveRunSiteSummary(db, run, siteId, { pagesVisited: 1, partsFound: 1, pagesFailed: 0, warnings: [] });
+    finishRun(db, run, 'done');
+    deleteSite(db, siteId);
+    expect(listSites(db)).toHaveLength(0);
+    expect(latestSnapshot(db)).toHaveLength(0);
+  });
+});
+
+describe('createSite defaults and boolean coercion', () => {
+  it('accepts minimal site with only required fields and sets defaults', () => {
+    const id = createSite(db, { name: 'Min', base_url: 'https://min.test/', strategy: 'prefix_search', prefixes: ['133.'] });
+    const site = listSites(db).find(s => s.id === id);
+    expect(site).toBeDefined();
+    expect(site.max_pages).toBe(200);
+    expect(site.enabled).toBe(1);
+    expect(site.search_url_pattern).toBeNull();
+  });
+  it('coerces enabled: true to 1', () => {
+    const id = createSite(db, { name: 'Bool', base_url: 'https://bool.test/', strategy: 'prefix_search', prefixes: [], enabled: true });
+    const site = listSites(db).find(s => s.id === id);
+    expect(site.enabled).toBe(1);
+  });
+});
+
+describe('my_parts deduplication by norm', () => {
+  it('replaceMyParts with variant spellings yields a single missingMyParts row', () => {
+    replaceMyParts(db, [{ partNumber: '133.0440-351' }, { partNumber: '133.0440 351' }]);
+    expect(missingMyParts(db)).toHaveLength(1);
+  });
+});

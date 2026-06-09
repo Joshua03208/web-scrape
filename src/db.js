@@ -1,7 +1,10 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { normalisePartNumber } from './extract/partNumber.js';
+
+const DEFAULT_DB = fileURLToPath(new URL('../data/scraper.db', import.meta.url));
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sites (
@@ -23,7 +26,7 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 CREATE TABLE IF NOT EXISTS run_sites (
   run_id INTEGER NOT NULL REFERENCES runs(id),
-  site_id INTEGER NOT NULL REFERENCES sites(id),
+  site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
   pages_visited INTEGER NOT NULL DEFAULT 0,
   parts_found INTEGER NOT NULL DEFAULT 0,
   pages_failed INTEGER NOT NULL DEFAULT 0,
@@ -33,7 +36,7 @@ CREATE TABLE IF NOT EXISTS run_sites (
 CREATE TABLE IF NOT EXISTS observations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id INTEGER NOT NULL REFERENCES runs(id),
-  site_id INTEGER NOT NULL REFERENCES sites(id),
+  site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
   part_number TEXT NOT NULL,
   part_number_norm TEXT NOT NULL,
   name TEXT,
@@ -45,21 +48,38 @@ CREATE TABLE IF NOT EXISTS observations (
 );
 CREATE INDEX IF NOT EXISTS idx_obs ON observations(site_id, part_number_norm, id);
 CREATE TABLE IF NOT EXISTS my_parts (
-  part_number TEXT PRIMARY KEY,
-  part_number_norm TEXT NOT NULL
+  part_number_norm TEXT PRIMARY KEY,
+  part_number TEXT NOT NULL
 );
 `;
 
-export function openDb(path = 'data/scraper.db') {
+export function openDb(path = DEFAULT_DB) {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
   db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
   return db;
 }
 
 // --- sites ---
 const siteFromRow = (r) => ({ ...r, prefixes: JSON.parse(r.prefixes) });
+
+const SITE_DEFAULTS = {
+  search_url_pattern: null, login_url: null, username: null, password: null,
+  enabled: 1, max_pages: 200,
+};
+function siteParams(s) {
+  const merged = { ...SITE_DEFAULTS, ...s };
+  return {
+    name: merged.name, base_url: merged.base_url, strategy: merged.strategy,
+    search_url_pattern: merged.search_url_pattern,
+    prefixes: JSON.stringify(merged.prefixes ?? []),
+    login_url: merged.login_url, username: merged.username, password: merged.password,
+    enabled: merged.enabled ? 1 : 0,
+    max_pages: Number(merged.max_pages) || 200,
+  };
+}
 
 export function listSites(db) {
   return db.prepare('SELECT * FROM sites ORDER BY id').all().map(siteFromRow);
@@ -74,7 +94,7 @@ export function createSite(db, s) {
                        login_url, username, password, enabled, max_pages)
     VALUES (@name, @base_url, @strategy, @search_url_pattern, @prefixes,
             @login_url, @username, @password, @enabled, @max_pages)
-  `).run({ ...s, prefixes: JSON.stringify(s.prefixes ?? []) });
+  `).run(siteParams(s));
   return info.lastInsertRowid;
 }
 export function updateSite(db, id, s) {
@@ -83,7 +103,7 @@ export function updateSite(db, id, s) {
       search_url_pattern=@search_url_pattern, prefixes=@prefixes, login_url=@login_url,
       username=@username, password=@password, enabled=@enabled, max_pages=@max_pages
     WHERE id=@id
-  `).run({ ...s, id, prefixes: JSON.stringify(s.prefixes ?? []) });
+  `).run({ ...siteParams(s), id });
 }
 export function deleteSite(db, id) {
   db.prepare('DELETE FROM sites WHERE id = ?').run(id);
@@ -133,10 +153,14 @@ export function insertObservations(db, runId, siteId, products) {
 
 export function latestSnapshot(db) {
   return db.prepare(`
-    WITH ranked AS (
-      SELECT o.*, ROW_NUMBER() OVER (
-        PARTITION BY o.site_id, o.part_number_norm ORDER BY o.id DESC) AS rn
-      FROM observations o
+    WITH per_run AS (
+      SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY site_id, part_number_norm, run_id ORDER BY id DESC) AS dup
+      FROM observations
+    ), ranked AS (
+      SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY site_id, part_number_norm ORDER BY run_id DESC, id DESC) AS rn
+      FROM per_run WHERE dup = 1
     )
     SELECT cur.part_number, cur.part_number_norm, cur.name, cur.price, cur.currency,
            cur.url, cur.low_confidence, cur.observed_at, cur.site_id,
@@ -163,8 +187,8 @@ export function fullHistory(db) {
 export function replaceMyParts(db, parts) {
   const replaceAll = db.transaction((rows) => {
     db.prepare('DELETE FROM my_parts').run();
-    const stmt = db.prepare('INSERT OR IGNORE INTO my_parts (part_number, part_number_norm) VALUES (?, ?)');
-    for (const p of rows) stmt.run(p.partNumber, normalisePartNumber(p.partNumber));
+    const stmt = db.prepare('INSERT OR IGNORE INTO my_parts (part_number_norm, part_number) VALUES (?, ?)');
+    for (const p of rows) stmt.run(normalisePartNumber(p.partNumber), p.partNumber);
   });
   replaceAll(parts);
 }

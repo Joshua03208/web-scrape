@@ -20,6 +20,11 @@ describe('rowsToCsv', () => {
     expect(csv).toContain('"Valve, ""COLD"" 20mm"');
     expect(csv.split('\r\n')[2]).toBe('133.0049.669,,17.63');
   });
+  it('neutralises formula-injection in cells', () => {
+    const csv = rowsToCsv([{ part_number: '=SUM(A1:A9)', name: '@cmd', price: 1 }], columns);
+    expect(csv).toContain("'=SUM(A1:A9)");
+    expect(csv).toContain("'@cmd");
+  });
 });
 
 describe('rowsToXlsxBuffer', () => {
