@@ -7,5 +7,8 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Matches: <prefix><digits/dots ending in a digit>, e.g. "133." -> 133.0440.351
 export function buildPartNumberRegex(prefixes) {
   const alts = prefixes.map(escapeRe).join('|');
-  return new RegExp(`(?<![£$€]\\s{0,2})(?<![\\d.])(?:${alts})[\\d.]*\\d`, 'i');
+  return new RegExp(
+    `(?<![£$€]\\s*)(?<![\\d.])(?:${alts})[\\d.]*\\d(?!\\d|\\.\\d)(?!\\s*(?:GBP|USD|EUR)\\b)`,
+    'i'
+  );
 }

@@ -30,4 +30,14 @@ describe('buildPartNumberRegex', () => {
   it('still matches a part number after a colon or space', () => {
     expect('Product Code: 133.0008.411'.match(re)[0]).toBe('133.0008.411');
   });
+  it('does not match a suffix-currency price', () => {
+    expect('133.50 GBP'.match(re)).toBeNull();
+    expect('shipping 133.50 GBP today'.match(re)).toBeNull();
+  });
+  it('does not match with extra spaces after a currency symbol', () => {
+    expect('£   133.50'.match(re)).toBeNull();
+  });
+  it('matches a part number at the end of a sentence', () => {
+    expect('order 133.0440.351.'.match(re)[0]).toBe('133.0440.351');
+  });
 });

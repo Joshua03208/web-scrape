@@ -73,14 +73,17 @@ export function extractPairsByProximity(html, { prefixes, pageUrl }) {
     };
   });
 
-  // Fix 4a: shared-price flagging — if two parts share the same price token position,
-  // set lowConfidence=true on both.
-  const pricePosCounts = new Map();
+  // Fix 4a: shared-price flagging — flag only when MORE THAN ONE DISTINCT partNumber
+  // is assigned to the same price token position.
+  const pricePosPartsMap = new Map();
   for (const a of assignments) {
-    pricePosCounts.set(a._pricePos, (pricePosCounts.get(a._pricePos) ?? 0) + 1);
+    if (!pricePosPartsMap.has(a._pricePos)) {
+      pricePosPartsMap.set(a._pricePos, new Set());
+    }
+    pricePosPartsMap.get(a._pricePos).add(a.partNumber);
   }
   for (const a of assignments) {
-    if (pricePosCounts.get(a._pricePos) > 1) {
+    if (pricePosPartsMap.get(a._pricePos).size > 1) {
       a.lowConfidence = true;
     }
   }

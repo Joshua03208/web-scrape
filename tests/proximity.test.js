@@ -49,7 +49,8 @@ describe('extractPairsByProximity', () => {
   });
 
   // Regression test 6: same part appearing twice (e.g. breadcrumb + table) with the
-  // same nearest price should be deduped to a single pair.
+  // same nearest price should be deduped to a single pair — and that pair must NOT be
+  // flagged lowConfidence (only one distinct part maps to the price token).
   it('dedupes identical partNumber|price pairs', () => {
     const html = `<html><head><title>T</title></head><body>
       <nav>133.0001.111</nav>
@@ -60,5 +61,6 @@ describe('extractPairsByProximity', () => {
     expect(pairs).toHaveLength(1);
     expect(pairs[0].partNumber).toBe('133.0001.111');
     expect(pairs[0].price).toBe(10);
+    expect(pairs[0].lowConfidence).toBe(false);
   });
 });
