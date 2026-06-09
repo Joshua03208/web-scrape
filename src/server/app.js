@@ -43,6 +43,9 @@ function validateSite(body) {
   if (!['prefix_search', 'link_crawl'].includes(body.strategy)) return 'invalid strategy';
   if (body.strategy === 'prefix_search' && !body.search_url_pattern)
     return 'search_url_pattern required for prefix_search';
+  // an empty prefix list would make the part-number matcher match any digit run
+  if (!Array.isArray(body.prefixes) || body.prefixes.filter((p) => String(p).trim()).length === 0)
+    return 'at least one part-number prefix is required';
   return null;
 }
 
@@ -139,8 +142,8 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
   // --- results & export ---
   app.get('/api/results', (req, res) => res.json(latestSnapshot(db)));
   app.get('/api/export/latest.csv', (req, res) => {
+    // UTF-8 BOM so Excel on Windows decodes £ correctly
     res.type('text/csv').attachment('latest-prices.csv')
-      // Fix 7: replaced invisible BOM literal with escape sequence (byte-identical)
       .send('﻿' + rowsToCsv(latestSnapshot(db), SNAPSHOT_COLUMNS));
   });
   app.get('/api/export/latest.xlsx', async (req, res) => {
@@ -149,8 +152,8 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
       .attachment('latest-prices.xlsx').send(Buffer.from(buf));
   });
   app.get('/api/export/history.csv', (req, res) => {
+    // UTF-8 BOM so Excel on Windows decodes £ correctly
     res.type('text/csv').attachment('price-history.csv')
-      // Fix 7: replaced invisible BOM literal with escape sequence (byte-identical)
       .send('﻿' + rowsToCsv(fullHistory(db), HISTORY_COLUMNS));
   });
 
