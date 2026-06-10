@@ -16,6 +16,7 @@
       <button data-tab="run">Run</button>
       <button data-tab="results">Results</button>
       <button data-tab="compare">Compare</button>
+      <button data-tab="spares">Spares</button>
     </nav>
   </header>
 
@@ -36,6 +37,7 @@
             <option value="prefix_search">Prefix search</option>
             <option value="category_crawl">Category crawl (walks the shop's category menus)</option>
             <option value="link_crawl">Crawl all links</option>
+            <option value="spares_map">Spares map (products &rarr; spare part numbers)</option>
           </select>
         </label>
         <label>Search URL pattern
@@ -149,6 +151,20 @@
           <tbody></tbody>
         </table>
       </div>
+    </section>
+
+    <section id="tab-spares" hidden>
+      <h2>Shower spares</h2>
+      <p class="hint">Which spare parts fit which shower &mdash; scraped from sites set to the "Spares map" strategy. Search a spare code to see every shower that uses it.</p>
+      <div class="toolbar">
+        <input id="spares-filter" placeholder="Search spare code, shower name or SKU...">
+        <a href="/api/export/spares.csv">Export CSV</a>
+      </div>
+      <p id="spares-count" class="results-count"></p>
+      <table id="spares-table">
+        <thead><tr><th>Spare Part</th><th>Shower</th><th>Shower SKU</th><th>Site</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </section>
   </main>
   <script src="app.js"></script>

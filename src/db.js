@@ -11,13 +11,23 @@ CREATE TABLE IF NOT EXISTS sites (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   base_url TEXT NOT NULL,
-  strategy TEXT NOT NULL CHECK (strategy IN ('prefix_search','category_crawl','link_crawl')),
+  strategy TEXT NOT NULL,
   search_url_pattern TEXT,
   prefixes TEXT NOT NULL DEFAULT '[]',
   login_url TEXT, username TEXT, password TEXT,
   enabled INTEGER NOT NULL DEFAULT 1,
   max_pages INTEGER NOT NULL DEFAULT 200
 );
+CREATE TABLE IF NOT EXISTS shower_spares (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+  shower TEXT NOT NULL,
+  sku TEXT,
+  spare TEXT NOT NULL,
+  url TEXT,
+  observed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_spares ON shower_spares(spare);
 CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   started_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -63,11 +73,12 @@ export function openDb(path = DEFAULT_DB) {
   return db;
 }
 
-// Existing databases were created with a CHECK constraint that predates the
-// category_crawl strategy. SQLite can't alter a CHECK, so rebuild the table once.
+// Early databases had a CHECK constraint on sites.strategy, which blocks new
+// strategy values. SQLite can't alter a CHECK, so rebuild once WITHOUT it —
+// strategy validation lives in the API layer.
 function migrateSitesStrategyCheck(db) {
   const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='sites'").get();
-  if (!row || row.sql.includes('category_crawl')) return;
+  if (!row || !row.sql.includes('CHECK (strategy')) return;
   db.pragma('foreign_keys = OFF');
   db.exec(`
     BEGIN;
@@ -75,7 +86,7 @@ function migrateSitesStrategyCheck(db) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       base_url TEXT NOT NULL,
-      strategy TEXT NOT NULL CHECK (strategy IN ('prefix_search','category_crawl','link_crawl')),
+      strategy TEXT NOT NULL,
       search_url_pattern TEXT,
       prefixes TEXT NOT NULL DEFAULT '[]',
       login_url TEXT, username TEXT, password TEXT,
@@ -88,6 +99,25 @@ function migrateSitesStrategyCheck(db) {
     COMMIT;
   `);
   db.pragma('foreign_keys = ON');
+}
+
+// --- shower spares (spares_map strategy) ---
+// Latest mapping only: each successful crawl replaces the site's rows.
+export function replaceShowerSpares(db, siteId, rows) {
+  const tx = db.transaction((items) => {
+    db.prepare('DELETE FROM shower_spares WHERE site_id = ?').run(siteId);
+    const stmt = db.prepare(
+      'INSERT INTO shower_spares (site_id, shower, sku, spare, url) VALUES (?, ?, ?, ?, ?)');
+    for (const r of items) stmt.run(siteId, r.shower, r.sku ?? null, r.spare, r.url ?? null);
+  });
+  tx(rows);
+}
+export function listShowerSpares(db) {
+  return db.prepare(`
+    SELECT ss.shower, ss.sku, ss.spare, ss.url, ss.observed_at, s.name AS site_name
+    FROM shower_spares ss JOIN sites s ON s.id = ss.site_id
+    ORDER BY ss.shower, ss.spare
+  `).all();
 }
 
 // --- sites ---

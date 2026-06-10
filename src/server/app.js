@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import {
   listSites, createSite, updateSite, deleteSite, getSite,
   listRuns, latestSnapshot, fullHistory, replaceMyParts, missingMyParts,
+  listShowerSpares,
 } from '../db.js';
 import { executeRun } from '../crawler/run.js';
 import { normalisePartNumber } from '../extract/partNumber.js';
@@ -41,11 +42,13 @@ const HISTORY_COLUMNS = [
 
 function validateSite(body) {
   if (!body.name || !body.base_url) return 'name and base_url are required';
-  if (!['prefix_search', 'category_crawl', 'link_crawl'].includes(body.strategy)) return 'invalid strategy';
+  if (!['prefix_search', 'category_crawl', 'link_crawl', 'spares_map'].includes(body.strategy)) return 'invalid strategy';
   if (body.strategy === 'prefix_search' && !body.search_url_pattern)
     return 'search_url_pattern required for prefix_search';
   // an empty prefix list would make the part-number matcher match any digit run
-  if (!Array.isArray(body.prefixes) || body.prefixes.filter((p) => String(p).trim()).length === 0)
+  // (spares_map doesn't use prefixes — codes come from explicit "Spares –" lines)
+  if (body.strategy !== 'spares_map' &&
+      (!Array.isArray(body.prefixes) || body.prefixes.filter((p) => String(p).trim()).length === 0))
     return 'at least one part-number prefix is required';
   return null;
 }
@@ -207,6 +210,20 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
     }
   });
   app.get('/api/parts/missing', (req, res) => res.json(missingMyParts(db)));
+
+  // --- shower spares map ---
+  app.get('/api/spares', (req, res) => res.json(listShowerSpares(db)));
+  app.get('/api/export/spares.csv', (req, res) => {
+    const cols = [
+      { key: 'spare', header: 'Spare Part' },
+      { key: 'shower', header: 'Shower' },
+      { key: 'sku', header: 'Shower SKU' },
+      { key: 'site_name', header: 'Site' },
+      { key: 'url', header: 'URL' },
+    ];
+    res.type('text/csv').attachment('shower-spares.csv')
+      .send('﻿' + rowsToCsv(listShowerSpares(db), cols));
+  });
 
   // --- price list comparison (no data is stored; parse and return) ---
   app.post('/api/compare', uploadSingle, async (req, res) => {

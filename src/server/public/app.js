@@ -25,8 +25,35 @@ document.querySelectorAll('nav button').forEach((btn) => {
       }).catch(() => {});
     }
     if (btn.dataset.tab === 'sites') loadSites();
+    if (btn.dataset.tab === 'spares') loadSpares();
   });
 });
+
+// --- shower spares ---
+let allSpares = [];
+async function loadSpares() {
+  allSpares = await api('/api/spares');
+  renderSpares();
+}
+function renderSpares() {
+  const q = $('#spares-filter').value.toLowerCase();
+  const rows = allSpares.filter((r) =>
+    !q || r.spare.toLowerCase().includes(q) || r.shower.toLowerCase().includes(q) ||
+    (r.sku ?? '').toLowerCase().includes(q));
+  $('#spares-count').textContent = allSpares.length
+    ? `Showing ${rows.length} of ${allSpares.length} spare links`
+    : '';
+  $('#spares-table tbody').innerHTML = rows.length === 0
+    ? `<tr><td class="empty" colspan="4">${allSpares.length === 0
+        ? 'No spares data yet — add a site with the Spares map strategy and run a scrape.'
+        : 'No matches.'}</td></tr>`
+    : rows.map((r) => `<tr>
+        <td>${esc(r.spare)}</td>
+        <td>${r.url ? `<a href="${esc(r.url)}" target="_blank">${esc(r.shower)}</a>` : esc(r.shower)}</td>
+        <td>${esc(r.sku)}</td>
+        <td>${esc(r.site_name)}</td></tr>`).join('');
+}
+$('#spares-filter').addEventListener('input', renderSpares);
 
 // --- sites ---
 async function loadSites() {
@@ -37,7 +64,7 @@ async function loadSites() {
     <tr>
       <td><span class="dot ${s.enabled ? 'on' : 'off'}"></span></td>
       <td>${esc(s.name)}</td>
-      <td>${{ prefix_search: 'Prefix search', category_crawl: 'Category crawl', link_crawl: 'Link crawl' }[s.strategy] ?? esc(s.strategy)}</td>
+      <td>${{ prefix_search: 'Prefix search', category_crawl: 'Category crawl', link_crawl: 'Link crawl', spares_map: 'Spares map' }[s.strategy] ?? esc(s.strategy)}</td>
       <td>${esc(s.prefixes.join(', '))}</td>
       <td>
         ${s.enabled ? `<button data-run="${s.id}">Scrape</button>` : ''}

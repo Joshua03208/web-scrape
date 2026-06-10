@@ -1,13 +1,15 @@
-import { listSites, createRun, finishRun, insertObservations, saveRunSiteSummary } from '../db.js';
+import { listSites, createRun, finishRun, insertObservations, saveRunSiteSummary, replaceShowerSpares } from '../db.js';
 import { crawlPrefixSearch } from './prefixSearch.js';
 import { crawlLinkCrawl } from './linkCrawl.js';
 import { crawlCategoryCrawl } from './categoryCrawl.js';
+import { crawlSparesMap } from './sparesMap.js';
 import { loginAndGetCookies } from './login.js';
 
 const STRATEGIES = {
   prefix_search: crawlPrefixSearch,
   category_crawl: crawlCategoryCrawl,
   link_crawl: crawlLinkCrawl,
+  spares_map: crawlSparesMap,
 };
 
 async function defaultCrawlSite(site, { onProgress }) {
@@ -33,7 +35,7 @@ export async function executeRun(db, { crawlSite = defaultCrawlSite, onProgress 
       let summarySaved = false;
       try {
         try { onProgress({ runId, siteName: site.name, phase: 'start' }); } catch (_) {}
-        const { products, stats } = await crawlSite(site, {
+        const { products, spares, stats } = await crawlSite(site, {
           onProgress: (p) => {
             try { onProgress({ runId, siteName: site.name, phase: 'crawling', ...p }); } catch (_) {}
           },
@@ -48,12 +50,18 @@ export async function executeRun(db, { crawlSite = defaultCrawlSite, onProgress 
         if (dropped > 0) warnings.push(`Skipped ${dropped} malformed product(s)`);
 
         insertObservations(db, runId, site.id, valid);
+        // spares_map strategy: replace the site's shower->spares mapping
+        let found = valid.length;
+        if (Array.isArray(spares)) {
+          replaceShowerSpares(db, site.id, spares);
+          found = spares.length;
+        }
         saveRunSiteSummary(db, runId, site.id, {
-          pagesVisited: stats.pagesVisited, partsFound: valid.length,
+          pagesVisited: stats.pagesVisited, partsFound: found,
           pagesFailed: stats.pagesFailed, warnings,
         });
         summarySaved = true;
-        try { onProgress({ runId, siteName: site.name, phase: 'done', partsFound: valid.length }); } catch (_) {}
+        try { onProgress({ runId, siteName: site.name, phase: 'done', partsFound: found }); } catch (_) {}
       } catch (err) {
         failures += 1;
         if (!summarySaved) {
