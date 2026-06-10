@@ -70,6 +70,7 @@ async function loadSites() {
       <td>${esc(s.prefixes.join(', '))}</td>
       <td>
         ${s.enabled ? `<button data-run="${s.id}">Scrape</button>` : ''}
+        ${s.strategy !== 'spares_map' ? `<button data-img="${s.id}" title="Download product images for this site">Images</button>` : ''}
         <button data-edit="${s.id}">Edit</button>
         <button data-del="${s.id}">Delete</button>
       </td>
@@ -79,6 +80,18 @@ async function loadSites() {
   $('#sites-table tbody').querySelectorAll('[data-del]').forEach((b) =>
     b.addEventListener('click', async () => {
       if (confirm('Delete this site?')) { await api(`/api/sites/${b.dataset.del}`, { method: 'DELETE' }); loadSites(); }
+    }));
+  $('#sites-table tbody').querySelectorAll('[data-img]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      try {
+        const prefix = eposSettings().prefix ?? 'FRANKE-';
+        await api('/api/images', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ siteId: Number(b.dataset.img), prefix }),
+        });
+        $('#images-status').textContent = 'Image download started...';
+        if (!imgTimer) imgTimer = setInterval(pollImages, 2000);
+      } catch (err) { $('#site-form-error').textContent = err.message; }
     }));
   $('#sites-table tbody').querySelectorAll('[data-run]').forEach((b) =>
     b.addEventListener('click', async () => {
@@ -102,6 +115,36 @@ function applyStrategyFields() {
 }
 $('#site-form').elements.strategy.addEventListener('change', applyStrategyFields);
 applyStrategyFields();
+
+// --- product image harvest ---
+let imgTimer = null;
+async function pollImages() {
+  try {
+    const s = await api('/api/images/current');
+    const st = s.stats;
+    if (st) {
+      $('#images-status').textContent =
+        `Images${s.siteName ? ` (${s.siteName})` : ''}: ${st.done}/${st.total} products — ` +
+        `${st.saved} images saved, ${st.skipped} already had, ${st.noImages} without images, ${st.failed} failed`;
+    }
+    if (!s.running) {
+      clearInterval(imgTimer);
+      imgTimer = null;
+      if (s.error) $('#images-status').textContent = `Image download failed: ${s.error}`;
+      else if (st) $('#images-status').textContent += ' — finished.';
+      $('#images-zip').hidden = false;
+    }
+  } catch { /* transient; keep polling */ }
+}
+
+// resume the status display if a harvest is already running (e.g. page refresh)
+api('/api/images/current').then((s) => {
+  if (s.running) {
+    imgTimer = setInterval(pollImages, 2000);
+  } else if (s.stats) {
+    pollImages();
+  }
+}).catch(() => {});
 
 // NOTE: always go through form.elements — `form.name` and `form.id` are
 // built-in HTMLFormElement properties and shadow inputs with those names.

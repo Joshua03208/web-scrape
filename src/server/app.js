@@ -10,6 +10,9 @@ import {
   listShowerSpares,
 } from '../db.js';
 import { executeRun } from '../crawler/run.js';
+import { harvestImages, imagesRoot } from '../crawler/imageHarvest.js';
+import { existsSync } from 'node:fs';
+import archiver from 'archiver';
 import { normalisePartNumber } from '../extract/partNumber.js';
 import { rowsToCsv } from '../export/csv.js';
 import { rowsToXlsxBuffer } from '../export/xlsx.js';
@@ -210,6 +213,36 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
     }
   });
   app.get('/api/parts/missing', (req, res) => res.json(missingMyParts(db)));
+
+  // --- product image harvest ---
+  const img = { running: false, siteName: null, stats: null, error: null };
+  app.post('/api/images', (req, res) => {
+    if (img.running) return res.status(409).json({ error: 'An image harvest is already running' });
+    if (current.running) return res.status(409).json({ error: 'Wait for the current scrape to finish first' });
+    const site = getSite(db, Number(req.body?.siteId));
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+    const prefix = String(req.body?.prefix ?? '');
+    img.running = true;
+    img.siteName = site.name;
+    img.stats = null;
+    img.error = null;
+    Promise.resolve()
+      .then(() => harvestImages(db, site, { prefix, onProgress: (s) => { img.stats = s; } }))
+      .then((s) => { img.stats = s; })
+      .catch((err) => { img.error = err.message; })
+      .finally(() => { img.running = false; });
+    res.status(202).json({ started: true });
+  });
+  app.get('/api/images/current', (req, res) => res.json(img));
+  app.get('/api/images/archive.zip', (req, res) => {
+    if (!existsSync(imagesRoot())) return res.status(404).json({ error: 'No images downloaded yet' });
+    res.type('application/zip').attachment('product-images.zip');
+    const archive = archiver('zip', { zlib: { level: 1 } });
+    archive.on('error', () => res.end());
+    archive.directory(imagesRoot(), false);
+    archive.pipe(res);
+    archive.finalize();
+  });
 
   // --- shower spares map ---
   app.get('/api/spares', (req, res) => res.json(listShowerSpares(db)));
