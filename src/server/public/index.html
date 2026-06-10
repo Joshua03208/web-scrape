@@ -89,8 +89,15 @@
           <div class="epos-row">
             <label>Epos code prefix <input id="epos-prefix" placeholder="FRANKE-"></label>
             <label>Brand <input id="epos-brand" placeholder="Franke"></label>
+            <label>Pricing mode
+              <select id="epos-mode">
+                <option value="rrp">Scraped price is my RRP</option>
+                <option value="cost">Scraped price is my COST</option>
+              </select>
+            </label>
+            <label id="epos-mult-wrap">RRP = COST &times; <input id="epos-mult" type="number" min="0" step="0.05" value="1.5"></label>
           </div>
-          <p class="hint">RRP = the scraped site price. Each tier is RRP adjusted by its percentage: pick <strong>&minus;</strong> to take the % off, or <strong>+</strong> to add it on top.</p>
+          <p class="hint" id="epos-mode-hint"></p>
           <div id="epos-tiers" class="epos-row"></div>
           <div class="epos-row">
             <button type="button" id="epos-download">Download EPOS CSV</button>

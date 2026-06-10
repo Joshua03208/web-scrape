@@ -245,7 +245,11 @@ function eposSettings() {
   try { return JSON.parse(localStorage.getItem('eposSettings')) ?? {}; } catch { return {}; }
 }
 function saveEposSettings() {
-  const s = { prefix: $('#epos-prefix').value, brand: $('#epos-brand').value, tiers: {}, signs: {} };
+  const s = {
+    prefix: $('#epos-prefix').value, brand: $('#epos-brand').value,
+    mode: $('#epos-mode').value, mult: $('#epos-mult').value,
+    tiers: {}, signs: {},
+  };
   for (const t of EPOS_TIERS) {
     s.tiers[t] = $(`#epos-tier-${t}`).value;
     s.signs[t] = $(`#epos-sign-${t}`).value;
@@ -253,10 +257,23 @@ function saveEposSettings() {
   localStorage.setItem('eposSettings', JSON.stringify(s));
 }
 
+function applyEposMode() {
+  const costMode = $('#epos-mode').value === 'cost';
+  $('#epos-mult-wrap').hidden = !costMode;
+  // in cost mode the COST column IS the scraped price — no % applies to it
+  $(`#epos-sign-COST`).disabled = costMode;
+  $(`#epos-tier-COST`).disabled = costMode;
+  $('#epos-mode-hint').textContent = costMode
+    ? 'Scraped price = your COST (no supplier discount). RRP = COST × the multiplier. Tier percentages apply to that RRP: − takes % off, + adds on top.'
+    : 'RRP = the scraped site price. Each tier is RRP adjusted by its percentage: − takes % off, + adds on top.';
+}
+
 function initEpos() {
   const s = eposSettings();
   $('#epos-prefix').value = s.prefix ?? 'FRANKE-';
   $('#epos-brand').value = s.brand ?? 'Franke';
+  $('#epos-mode').value = s.mode ?? 'rrp';
+  $('#epos-mult').value = s.mult ?? '1.5';
   $('#epos-tiers').innerHTML = EPOS_TIERS.map((t) => {
     // older saved settings used a single signed number (negative = above RRP)
     const raw = Number(s.tiers?.[t] ?? 0);
@@ -271,6 +288,8 @@ function initEpos() {
       </span></label>`;
   }).join('');
   $('#epos-export').querySelectorAll('input, select').forEach((i) => i.addEventListener('change', saveEposSettings));
+  $('#epos-mode').addEventListener('change', applyEposMode);
+  applyEposMode();
 }
 
 function eposCsvCell(value) {
@@ -284,6 +303,8 @@ $('#epos-download').addEventListener('click', () => {
   if (rows.length === 0) { $('#epos-scope').textContent = 'Nothing to export — adjust the filter.'; return; }
   const prefix = $('#epos-prefix').value.trim();
   const brand = $('#epos-brand').value.trim();
+  const costMode = $('#epos-mode').value === 'cost';
+  const mult = Number($('#epos-mult').value) || 1.5;
   const factor = {};
   for (const t of EPOS_TIERS) {
     const pct = Math.abs(Number($(`#epos-tier-${t}`).value) || 0);
@@ -293,9 +314,12 @@ $('#epos-download').addEventListener('click', () => {
   const lines = [header.join(',')];
   for (const r of rows) {
     const desc = `${brand ? brand + ' ' : ''}${r.name ?? ''} - ${r.part_number}`.trim();
-    const tiers = EPOS_TIERS.map((t) => (r.price * factor[t]).toFixed(2));
+    // cost mode: scraped price = COST, RRP = COST × multiplier, tiers from that RRP
+    const rrp = costMode ? r.price * mult : r.price;
+    const tiers = EPOS_TIERS.map((t) =>
+      (t === 'COST' && costMode ? r.price : rrp * factor[t]).toFixed(2));
     lines.push([
-      eposCsvCell(`${prefix}${r.part_number}`), eposCsvCell(desc), r.price.toFixed(2),
+      eposCsvCell(`${prefix}${r.part_number}`), eposCsvCell(desc), rrp.toFixed(2),
       ...tiers, eposCsvCell(brand), '',
     ].join(','));
   }
