@@ -201,6 +201,9 @@ legend { font-size: 0.74rem; color: var(--faint); padding: 0 0.4rem; }
 .epos-row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: end; }
 .epos-row label { flex: 1; min-width: 100px; max-width: 180px; }
 .epos-row input { width: 100%; min-width: 0; }
+.tier-pair { display: flex; gap: 0.3rem; }
+.tier-pair select { padding: 0.3rem 0.2rem; background: var(--surface-2); font-weight: 700; }
+.tier-pair input { flex: 1; }
 .hint { font-size: 0.78rem; color: var(--faint); margin: 0; }
 #epos-download { background: var(--accent); color: #160d0c; }
 #epos-download:hover { background: var(--accent-strong); }

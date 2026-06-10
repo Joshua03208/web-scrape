@@ -245,8 +245,11 @@ function eposSettings() {
   try { return JSON.parse(localStorage.getItem('eposSettings')) ?? {}; } catch { return {}; }
 }
 function saveEposSettings() {
-  const s = { prefix: $('#epos-prefix').value, brand: $('#epos-brand').value, tiers: {} };
-  for (const t of EPOS_TIERS) s.tiers[t] = $(`#epos-tier-${t}`).value;
+  const s = { prefix: $('#epos-prefix').value, brand: $('#epos-brand').value, tiers: {}, signs: {} };
+  for (const t of EPOS_TIERS) {
+    s.tiers[t] = $(`#epos-tier-${t}`).value;
+    s.signs[t] = $(`#epos-sign-${t}`).value;
+  }
   localStorage.setItem('eposSettings', JSON.stringify(s));
 }
 
@@ -254,9 +257,20 @@ function initEpos() {
   const s = eposSettings();
   $('#epos-prefix').value = s.prefix ?? 'FRANKE-';
   $('#epos-brand').value = s.brand ?? 'Franke';
-  $('#epos-tiers').innerHTML = EPOS_TIERS.map((t) =>
-    `<label>${t} % off <input id="epos-tier-${t}" type="number" step="0.1" value="${esc(s.tiers?.[t] ?? '0')}"></label>`).join('');
-  $('#epos-export').querySelectorAll('input').forEach((i) => i.addEventListener('change', saveEposSettings));
+  $('#epos-tiers').innerHTML = EPOS_TIERS.map((t) => {
+    // older saved settings used a single signed number (negative = above RRP)
+    const raw = Number(s.tiers?.[t] ?? 0);
+    const sign = s.signs?.[t] ?? (raw < 0 ? '+' : '-');
+    return `<label>${t} %
+      <span class="tier-pair">
+        <select id="epos-sign-${t}" title="minus = % off RRP, plus = % added on top">
+          <option value="-" ${sign === '-' ? 'selected' : ''}>&minus;</option>
+          <option value="+" ${sign === '+' ? 'selected' : ''}>+</option>
+        </select>
+        <input id="epos-tier-${t}" type="number" min="0" step="0.1" value="${esc(String(Math.abs(raw)))}">
+      </span></label>`;
+  }).join('');
+  $('#epos-export').querySelectorAll('input, select').forEach((i) => i.addEventListener('change', saveEposSettings));
 }
 
 function eposCsvCell(value) {
@@ -270,13 +284,16 @@ $('#epos-download').addEventListener('click', () => {
   if (rows.length === 0) { $('#epos-scope').textContent = 'Nothing to export — adjust the filter.'; return; }
   const prefix = $('#epos-prefix').value.trim();
   const brand = $('#epos-brand').value.trim();
-  const pct = {};
-  for (const t of EPOS_TIERS) pct[t] = Number($(`#epos-tier-${t}`).value) || 0;
+  const factor = {};
+  for (const t of EPOS_TIERS) {
+    const pct = Math.abs(Number($(`#epos-tier-${t}`).value) || 0);
+    factor[t] = $(`#epos-sign-${t}`).value === '+' ? 1 + pct / 100 : 1 - pct / 100;
+  }
   const header = ['Epos Code', 'Description', 'RRP', ...EPOS_TIERS, 'Brand', 'RowStatus'];
   const lines = [header.join(',')];
   for (const r of rows) {
     const desc = `${brand ? brand + ' ' : ''}${r.name ?? ''} - ${r.part_number}`.trim();
-    const tiers = EPOS_TIERS.map((t) => (r.price * (1 - pct[t] / 100)).toFixed(2));
+    const tiers = EPOS_TIERS.map((t) => (r.price * factor[t]).toFixed(2));
     lines.push([
       eposCsvCell(`${prefix}${r.part_number}`), eposCsvCell(desc), r.price.toFixed(2),
       ...tiers, eposCsvCell(brand), '',
