@@ -3,3 +3,4 @@ storage/
 data/
 *.db
 franke-spares-pricelist.csv
+/*.xlsx

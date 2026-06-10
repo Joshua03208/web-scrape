@@ -258,14 +258,33 @@ function saveEposSettings() {
 }
 
 function applyEposMode() {
-  const costMode = $('#epos-mode').value === 'cost';
-  $('#epos-mult-wrap').hidden = !costMode;
+  const mode = $('#epos-mode').value;
+  $('#epos-mult-wrap').hidden = mode === 'rrp';
+  $('#epos-tiers').hidden = mode === 'formulas';
   // in cost mode the COST column IS the scraped price — no % applies to it
-  $(`#epos-sign-COST`).disabled = costMode;
-  $(`#epos-tier-COST`).disabled = costMode;
-  $('#epos-mode-hint').textContent = costMode
-    ? 'Scraped price = your COST (no supplier discount). RRP = COST × the multiplier. Tier percentages apply to that RRP: − takes % off, + adds on top.'
-    : 'RRP = the scraped site price. Each tier is RRP adjusted by its percentage: − takes % off, + adds on top.';
+  $(`#epos-sign-COST`).disabled = mode === 'cost';
+  $(`#epos-tier-COST`).disabled = mode === 'cost';
+  $('#epos-mode-hint').textContent =
+    mode === 'formulas'
+      ? 'Exact copy of the pricing spreadsheet: COST = scraped price, RRP = COST × multiplier, WEBSITE/ENGINEER = RRP −5% with a (COST+2)×1.35 floor on thin margins, TRADE = 15% under that, MERCHANT = min((COST+1)×1.1, WEBSITE), STAFF = COST×1.1, AMAZON/EBAY = WEBSITE or COST×1.45 floor.'
+    : mode === 'cost'
+      ? 'Scraped price = your COST (no supplier discount). RRP = COST × the multiplier. Tier percentages apply to that RRP: − takes % off, + adds on top.'
+      : 'RRP = the scraped site price. Each tier is RRP adjusted by its percentage: − takes % off, + adds on top.';
+}
+
+// Faithful translation of the FRANKE_SPARES_EXAMPLE_WITH_FORMULA1S.xlsx formulas.
+function frankeFormulaTiers(cost, mult) {
+  const D = cost;            // COST = scraped price (no supplier discount)
+  const C = D * mult;        // RRP  = COST × 1.5
+  // WEBSITE: =IF(C=0,0,IF(AND(C<((D+2)*1.35),(C-D)<4),((D+2)*1.35),C*0.95))
+  const E = C === 0 ? 0 : (C < (D + 2) * 1.35 && C - D < 4 ? (D + 2) * 1.35 : C * 0.95);
+  // TRADE: =IF(E>C,E*0.85,IF((C*0.85)>E,E,C*0.85))
+  const F = E > C ? E * 0.85 : Math.min(C * 0.85, E);
+  // MERCHANT: =IF(((D+1)*1.1)>E,E,(D+1)*1.1)
+  const H = Math.min((D + 1) * 1.1, E);
+  // AMAZON/EBAY: =IF((E*0.7)<D,D*1.45,E)
+  const J = E * 0.7 < D ? D * 1.45 : E;
+  return { rrp: C, COST: D, WEBSITE: E, TRADE: F, ENGINEER: E, MERCHANT: H, STAFF: D * 1.1, AMAZON: J, EBAY: J };
 }
 
 function initEpos() {
@@ -303,7 +322,8 @@ $('#epos-download').addEventListener('click', () => {
   if (rows.length === 0) { $('#epos-scope').textContent = 'Nothing to export — adjust the filter.'; return; }
   const prefix = $('#epos-prefix').value.trim();
   const brand = $('#epos-brand').value.trim();
-  const costMode = $('#epos-mode').value === 'cost';
+  const mode = $('#epos-mode').value;
+  const costMode = mode === 'cost';
   const mult = Number($('#epos-mult').value) || 1.5;
   const factor = {};
   for (const t of EPOS_TIERS) {
@@ -315,9 +335,11 @@ $('#epos-download').addEventListener('click', () => {
   for (const r of rows) {
     const desc = `${brand ? brand + ' ' : ''}${r.name ?? ''} - ${r.part_number}`.trim();
     // cost mode: scraped price = COST, RRP = COST × multiplier, tiers from that RRP
-    const rrp = costMode ? r.price * mult : r.price;
+    // formulas mode: exact spreadsheet formulas (see frankeFormulaTiers)
+    const f = mode === 'formulas' ? frankeFormulaTiers(r.price, mult) : null;
+    const rrp = f ? f.rrp : costMode ? r.price * mult : r.price;
     const tiers = EPOS_TIERS.map((t) =>
-      (t === 'COST' && costMode ? r.price : rrp * factor[t]).toFixed(2));
+      (f ? f[t] : t === 'COST' && costMode ? r.price : rrp * factor[t]).toFixed(2));
     lines.push([
       eposCsvCell(`${prefix}${r.part_number}`), eposCsvCell(desc), rrp.toFixed(2),
       ...tiers, eposCsvCell(brand), '',
