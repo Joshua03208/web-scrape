@@ -235,6 +235,32 @@ select {
 #compare-table td:nth-child(1) { font-family: var(--mono); font-size: 0.83rem; }
 #spares-table td:nth-child(1), #spares-table td:nth-child(3) { font-family: var(--mono); font-size: 0.83rem; }
 
+/* sites guide */
+.guide {
+  margin-top: 1.5rem; max-width: 720px;
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius);
+}
+.guide summary {
+  cursor: pointer; padding: 0.75rem 1.1rem; font-size: 0.88rem; font-weight: 500;
+  color: var(--muted); transition: color 0.18s;
+}
+.guide summary:hover, .guide[open] summary { color: var(--text); }
+.guide-body { padding: 0 1.25rem 1.25rem; font-size: 0.86rem; color: var(--muted); line-height: 1.6; }
+.guide-body h4 { color: var(--text); font-size: 0.9rem; margin: 1.3rem 0 0.35rem; }
+.guide-body p, .guide-body ol { margin: 0.35rem 0; }
+.guide-body ol { padding-left: 1.2rem; }
+.guide-body code {
+  font-family: var(--mono); font-size: 0.78rem; background: var(--bg);
+  border: 1px solid var(--border-soft); border-radius: 4px; padding: 0.05rem 0.35rem;
+  overflow-wrap: anywhere;
+}
+.guide-fields { font-size: 0.8rem; color: var(--faint); }
+.guide-tag {
+  font-size: 0.68rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--accent-strong); background: var(--accent-soft);
+  border-radius: 999px; padding: 0.1rem 0.5rem; margin-left: 0.4rem; vertical-align: middle;
+}
+
 #missing-parts { margin-top: 1.25rem; font-size: 0.85rem; color: var(--muted); }
 #missing-parts summary { cursor: pointer; transition: color 0.18s; }
 #missing-parts summary:hover { color: var(--text); }

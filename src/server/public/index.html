@@ -40,10 +40,10 @@
             <option value="spares_map">Spares map (products &rarr; spare part numbers)</option>
           </select>
         </label>
-        <label>Search URL pattern
+        <label id="field-pattern">Search URL pattern
           <input name="search_url_pattern" placeholder="index.php?route=product/search&amp;search={query}&amp;page={page}">
         </label>
-        <label>Prefixes (comma separated) <input name="prefixes" placeholder="112., 113., 133."></label>
+        <label id="field-prefixes">Prefixes (comma separated) <input name="prefixes" placeholder="112., 113., 133."></label>
         <label>Max pages <input name="max_pages" type="number" value="200"></label>
         <details class="login-details">
           <summary>Dealer login (only for sites that need an account)</summary>
@@ -60,6 +60,39 @@
           <button type="button" id="site-form-reset">Clear</button>
         </div>
       </form>
+
+      <details class="panel guide">
+        <summary>Guide &mdash; strategies and how to add a site</summary>
+        <div class="guide-body">
+          <h4>How to add a site</h4>
+          <ol>
+            <li>Fill in a name and the site's address, pick the strategy that fits (below), save.</li>
+            <li>Press the site's <strong>Scrape</strong> button to run it on its own, or <strong>Run now</strong> on the Run tab to scrape every enabled site.</li>
+            <li>Prices land in <strong>Results</strong>; spares mappings land in <strong>Spares</strong>.</li>
+          </ol>
+
+          <h4>Prefix search <span class="guide-tag">best for price lists</span></h4>
+          <p>Uses the shop's own search box, once per part-number prefix, walking every results page. It also walks the shop's category menus and chases any cross-referenced part numbers it spots, so it catches products the search engine misses. Most thorough option for collecting prices.</p>
+          <p class="guide-fields">Needs: <strong>Base URL</strong> (shop homepage), <strong>Search URL pattern</strong> with <code>{query}</code> and <code>{page}</code> placeholders, and your <strong>prefixes</strong>.<br>
+          Example &mdash; Central Services: base <code>https://central-servicesuk.co.uk/</code>, pattern <code>index.php?route=product/search&amp;search={query}&amp;page={page}&amp;limit=100</code>, prefixes <code>112., 113., 119., 120., 133., 150., 992., 995.</code></p>
+
+          <h4>Category crawl</h4>
+          <p>Skips the search box entirely and walks the shop's category pages (found via its menus and sitemap), reading every product listing. Use when a shop has no usable search, or as a lighter alternative to prefix search. Still needs prefixes to know what counts as a part number.</p>
+          <p class="guide-fields">Needs: <strong>Base URL</strong> (shop homepage) and <strong>prefixes</strong>. No search pattern.</p>
+
+          <h4>Crawl all links <span class="guide-tag">last resort</span></h4>
+          <p>Follows every link on the site and pairs part numbers with the nearest price on each page. Works anywhere but is slower and less precise &mdash; only use it when neither of the above fits. Max pages caps how far it wanders.</p>
+          <p class="guide-fields">Needs: <strong>Base URL</strong> and <strong>prefixes</strong>.</p>
+
+          <h4>Spares map <span class="guide-tag">no prices</span></h4>
+          <p>For linking spare-part codes to the product they belong to. Point it at a <em>category page</em>; it opens every product in that category (and its sub-categories) and records the codes from each product's Spares list against the product name and SKU. Results appear in the Spares tab.</p>
+          <p class="guide-fields">Needs: <strong>Base URL = the category page</strong> (keep any <code>?product_tag=...</code> part). Prefixes and search pattern stay empty.<br>
+          Example &mdash; Intatec showers: base <code>https://www.intatec.co.uk/product-category/plumbing-and-heating/showers/?product_tag=inspiration-showers</code></p>
+
+          <h4>Shared settings</h4>
+          <p><strong>Max pages</strong> caps how many pages one run may fetch (politeness + runaway protection) &mdash; 200 suits big shops, 80 a single category. <strong>Dealer login</strong> is only for sites that show prices after signing in: give the login page address and your credentials, and the scraper signs in before crawling. <strong>Enabled</strong> controls whether Run now includes the site; the per-site Scrape button works regardless of other sites.</p>
+        </div>
+      </details>
     </section>
 
     <section id="tab-run" hidden>

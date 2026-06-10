@@ -92,6 +92,15 @@ async function loadSites() {
     }));
 }
 
+// Hide form fields the chosen strategy doesn't use.
+function applyStrategyFields() {
+  const strategy = $('#site-form').elements.strategy.value;
+  $('#field-pattern').hidden = strategy !== 'prefix_search';
+  $('#field-prefixes').hidden = strategy === 'spares_map';
+}
+$('#site-form').elements.strategy.addEventListener('change', applyStrategyFields);
+applyStrategyFields();
+
 // NOTE: always go through form.elements — `form.name` and `form.id` are
 // built-in HTMLFormElement properties and shadow inputs with those names.
 function fillForm(s) {
@@ -102,11 +111,13 @@ function fillForm(s) {
   el.prefixes.value = s.prefixes.join(', '); el.max_pages.value = s.max_pages;
   el.login_url.value = s.login_url ?? ''; el.username.value = s.username ?? '';
   el.password.value = s.password ?? ''; el.enabled.checked = !!s.enabled;
+  applyStrategyFields();
 }
 
 $('#site-form-reset').addEventListener('click', () => {
   $('#site-form').reset(); $('#site-form').elements.site_id.value = '';
   $('#site-form-title').textContent = 'Add site';
+  applyStrategyFields();
 });
 
 $('#site-form').addEventListener('submit', async (e) => {
