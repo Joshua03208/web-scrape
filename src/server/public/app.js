@@ -298,6 +298,19 @@ const diffCell = (diff, pct) =>
 let cmp = null;           // { changed, added, removed }
 let cmpView = 'changed';  // which sub-tab is showing
 let cmpDir = 'all';       // all | up | down (changed view only)
+let cmpUpload = null;     // last uploaded parts list
+let cmpResults = null;    // scraped results fetched at upload time
+
+function rebuildComparison() {
+  const site = $('#compare-site').value;
+  const current = site ? cmpResults.filter((r) => r.site_name === site) : cmpResults;
+  cmp = buildComparison(cmpUpload, current);
+  $('#compare-status').textContent =
+    `Compared ${cmpUpload.length} parts in your file against ${current.length} scraped parts${site ? ` from ${site}` : ''}.`;
+  renderCompareStats();
+  renderCompare();
+  $('#compare-output').hidden = false;
+}
 
 $('#compare-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
@@ -310,21 +323,26 @@ $('#compare-file').addEventListener('change', async (e) => {
       api('/api/compare', { method: 'POST', body: form }),
       api('/api/results'),
     ]);
-    cmp = buildComparison(parts, current);
+    cmpUpload = parts;
+    cmpResults = current;
     cmpView = 'changed';
     cmpDir = 'all';
     $('#compare-search').value = '';
-    $('#compare-status').textContent =
-      `Compared ${parts.length} parts in your file against ${current.length} scraped parts.`;
-    renderCompareStats();
-    renderCompare();
-    $('#compare-output').hidden = false;
+    // populate the site dropdown, keeping the current choice if still valid
+    const sites = [...new Set(current.map((r) => r.site_name))].sort();
+    const chosen = $('#compare-site').value;
+    $('#compare-site').innerHTML = '<option value="">All sites</option>' +
+      sites.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    if (sites.includes(chosen)) $('#compare-site').value = chosen;
+    rebuildComparison();
   } catch (err) {
     $('#compare-status').textContent = `Failed: ${err.message}`;
     $('#compare-output').hidden = true;
   }
   e.target.value = '';
 });
+
+$('#compare-site').addEventListener('change', () => cmpUpload && rebuildComparison());
 
 function buildComparison(oldParts, current) {
   const oldByNorm = new Map(oldParts.map((p) => [p.norm, p]));
