@@ -126,11 +126,6 @@
         <div id="compare-stats" class="stats"></div>
         <div class="toolbar">
           <input id="compare-search" placeholder="Search part number or name...">
-          <span id="compare-dir" class="chips chips-inline">
-            <button class="chip active" data-dir="all">All</button>
-            <button class="chip" data-dir="up">Risen</button>
-            <button class="chip" data-dir="down">Fallen</button>
-          </span>
           <select id="compare-sort">
             <option value="abs">Biggest change (&pound;)</option>
             <option value="pct">Biggest change (%)</option>
@@ -138,9 +133,12 @@
           </select>
           <button type="button" id="compare-export">Download report CSV</button>
         </div>
-        <div id="compare-tabs" class="chips"></div>
+        <div id="compare-filter" class="chips"></div>
         <p id="compare-count" class="results-count"></p>
-        <table id="compare-table"><thead></thead><tbody></tbody></table>
+        <table id="compare-table">
+          <thead><tr><th>Part Number</th><th>Name</th><th>Old</th><th>New</th><th>Change</th><th>Site</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </section>
   </main>
