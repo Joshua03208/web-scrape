@@ -2,3 +2,4 @@ node_modules/
 storage/
 data/
 *.db
+franke-spares-pricelist.csv
