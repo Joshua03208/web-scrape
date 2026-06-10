@@ -2,6 +2,7 @@ import { PlaywrightCrawler, Configuration } from 'crawlee';
 import { extractListingProducts } from '../extract/listing.js';
 import { buildPartNumberRegex } from '../extract/partNumber.js';
 import { buildSearchUrl } from '../extract/pagination.js';
+import { crawlCategoryCrawl } from './categoryCrawl.js';
 
 export async function crawlPrefixSearch(site, { cookies = null, onProgress = () => {} } = {}) {
   const products = [];
@@ -91,7 +92,31 @@ export async function crawlPrefixSearch(site, { cookies = null, onProgress = () 
     uniqueKey: `${site.id}:${prefix}:1`,
   })));
 
-  // --- Phase 2: cross-reference harvest ---
+  // --- Phase 2: category walk ---
+  // Some products never appear in search results for partial terms but ARE listed
+  // on category pages (and vice versa); crawl both and take the union.
+  const catResult = await crawlCategoryCrawl(site, {
+    cookies,
+    onProgress: (p) => onProgress({ pagesVisited: stats.pagesVisited + p.pagesVisited, partsFound: products.length }),
+    onPageHtml: (html) => {
+      for (const code of html.match(harvestRe) ?? []) harvested.add(code);
+    },
+  });
+  stats.pagesVisited += catResult.stats.pagesVisited;
+  stats.pagesFailed += catResult.stats.pagesFailed;
+  for (const w of catResult.stats.warnings) {
+    if (!w.startsWith('Category crawl found no products')) stats.warnings.push(w);
+  }
+  for (const p of catResult.products) {
+    const key = `${p.partNumber}|${p.url}`;
+    if (!seenSiteWide.has(key)) {
+      seenSiteWide.add(key);
+      products.push(p);
+    }
+  }
+  onProgress({ pagesVisited: stats.pagesVisited, partsFound: products.length });
+
+  // --- Phase 3: cross-reference harvest ---
   // Codes that appeared in page text but were never captured as products are
   // searched individually (one page each, no pagination).
   const captured = new Set(products.map((p) => p.partNumber));

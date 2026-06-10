@@ -55,7 +55,8 @@ describe('extractListingProducts', () => {
       name: 'Valve (20 Splines) : COLD',
       price: 20.81,
       currency: 'GBP',
-      url: 'https://central-servicesuk.co.uk/valve-20-splines-cold?search=133.',
+      // nav params like ?search= are stripped so search/category hits dedupe
+      url: 'https://central-servicesuk.co.uk/valve-20-splines-cold',
       lowConfidence: false,
     });
   });

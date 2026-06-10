@@ -3,12 +3,16 @@ import { findAllPrices } from './price.js';
 import { buildPartNumberRegex } from './partNumber.js';
 
 // Fix 3: robust URL resolution — skips garbage hrefs and javascript: URLs.
+// Navigation params are stripped so the same product reached via search results
+// and via a category page yields ONE url (dedupe key is partNumber|url).
+const NAV_PARAMS = ['search', 'path', 'page', 'limit', 'sort', 'order', 'description'];
 function resolveUrl(href, baseUrl) {
   if (!href) return null;
   try {
     const u = new URL(href, baseUrl);
-    if (u.protocol === 'http:' || u.protocol === 'https:') return u.href;
-    return null;
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    for (const p of NAV_PARAMS) u.searchParams.delete(p);
+    return u.href;
   } catch {
     return null;
   }

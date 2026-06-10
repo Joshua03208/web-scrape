@@ -26,7 +26,7 @@ export function normaliseCategoryUrl(href, baseUrl) {
 // product cards from every listing page. Unlike prefix search this does not depend
 // on the site's search engine, which on some shops misses products whose name/model
 // fields don't contain the search term.
-export async function crawlCategoryCrawl(site, { cookies = null, onProgress = () => {} } = {}) {
+export async function crawlCategoryCrawl(site, { cookies = null, onProgress = () => {}, onPageHtml = null } = {}) {
   const products = [];
   const stats = { pagesVisited: 0, pagesFailed: 0, warnings: [] };
   const seen = new Set();
@@ -51,6 +51,7 @@ export async function crawlCategoryCrawl(site, { cookies = null, onProgress = ()
     requestHandler: async ({ page, crawler }) => {
       stats.pagesVisited += 1;
       const html = await page.content();
+      onPageHtml?.(html);
       const found = extractListingProducts(html, { prefixes: site.prefixes, baseUrl: site.base_url });
       for (const p of found) {
         const key = `${p.partNumber}|${p.url}`;
