@@ -15,6 +15,7 @@
       <button data-tab="sites" class="active">Sites</button>
       <button data-tab="run">Run</button>
       <button data-tab="results">Results</button>
+      <button data-tab="compare">Compare</button>
     </nav>
   </header>
 
@@ -41,12 +42,14 @@
         </label>
         <label>Prefixes (comma separated) <input name="prefixes" placeholder="112., 113., 133."></label>
         <label>Max pages <input name="max_pages" type="number" value="200"></label>
-        <fieldset>
-          <legend>Dealer login (optional)</legend>
-          <label>Login URL <input name="login_url"></label>
-          <label>Username <input name="username" autocomplete="off"></label>
-          <label>Password <input name="password" type="password" autocomplete="off"></label>
-        </fieldset>
+        <details class="login-details">
+          <summary>Dealer login (only for sites that need an account)</summary>
+          <fieldset>
+            <label>Login URL <input name="login_url"></label>
+            <label>Username <input name="username" autocomplete="off"></label>
+            <label>Password <input name="password" type="password" autocomplete="off"></label>
+          </fieldset>
+        </details>
         <label class="check"><input type="checkbox" name="enabled" checked> Enabled</label>
         <p id="site-form-error" class="form-error"></p>
         <div class="form-actions">
@@ -94,6 +97,7 @@
           </div>
         </div>
       </details>
+      <div id="site-chips" class="chips" hidden></div>
       <div id="prefix-chips" class="chips"></div>
       <p id="results-count" class="results-count"></p>
       <table id="results-table">
@@ -104,6 +108,34 @@
         <tbody></tbody>
       </table>
       <details id="missing-parts"><summary>My parts not found on any site</summary><ul></ul></details>
+    </section>
+
+    <section id="tab-compare" hidden>
+      <h2>Compare price lists</h2>
+      <p class="hint">Upload an old price list (.csv or .xlsx &mdash; a previous EPOS export or any list with a part-number column and an RRP/price column). It's matched against the latest scraped prices by part number.</p>
+      <div class="toolbar">
+        <label class="upload">Upload old price list
+          <input type="file" id="compare-file" accept=".csv,.xlsx" hidden>
+        </label>
+        <span id="compare-status" class="hint"></span>
+      </div>
+      <div id="compare-output" hidden>
+        <h3 id="compare-changed-title">Changed prices</h3>
+        <table id="compare-changed">
+          <thead><tr><th>Part Number</th><th>Name</th><th>Old</th><th>New</th><th>Difference</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h3 id="compare-added-title">Added (scraped now, not in your file)</h3>
+        <table id="compare-added">
+          <thead><tr><th>Part Number</th><th>Name</th><th>Price</th><th>Site</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h3 id="compare-removed-title">Removed (in your file, no longer scraped)</h3>
+        <table id="compare-removed">
+          <thead><tr><th>Part Number</th><th>Old price</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </section>
   </main>
   <script src="app.js"></script>

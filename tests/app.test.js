@@ -134,6 +134,39 @@ describe('sites API — edge cases', () => {
   });
 });
 
+describe('compare API', () => {
+  it('parses an EPOS-style csv into normalised parts with prices', async () => {
+    const csv = 'Epos Code,Description,RRP\nFRANKE-133.0007.840,Franke Cable,58.64\nFRANKE-112.0001.111,"Thing, big","1,234.56"\n';
+    const res = await request(app).post('/api/compare')
+      .attach('file', Buffer.from(csv), 'old.csv').expect(200);
+    expect(res.body.parts).toEqual([
+      { code: '133.0007.840', norm: '1330007840', price: 58.64 },
+      { code: '112.0001.111', norm: '1120001111', price: 1234.56 },
+    ]);
+  });
+  it('rejects files with no part numbers', async () => {
+    await request(app).post('/api/compare')
+      .attach('file', Buffer.from('Name\nFoo\n'), 'old.csv').expect(400);
+  });
+  it('rejects unsupported file types', async () => {
+    await request(app).post('/api/compare')
+      .attach('file', Buffer.from('junk'), 'old.xls').expect(400);
+  });
+});
+
+describe('runs API — siteIds', () => {
+  it('passes siteIds through to the executor', async () => {
+    createSite(db, SITE);
+    let received;
+    app = createApp(db, {
+      runExecutor: async (database, opts) => { received = opts.siteIds; return 1; },
+    });
+    await request(app).post('/api/runs').send({ siteIds: [1] }).expect(202);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(received).toEqual([1]);
+  });
+});
+
 describe('runs API — state machine', () => {
   // Fix 5: runId is null at the start of a new run
   it('clears the previous runId when a new run starts', async () => {

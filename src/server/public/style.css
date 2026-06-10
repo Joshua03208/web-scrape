@@ -203,6 +203,14 @@ legend { font-size: 0.74rem; color: var(--faint); padding: 0 0.4rem; }
 #epos-download { background: var(--accent); color: #160d0c; }
 #epos-download:hover { background: var(--accent-strong); }
 
+.login-details summary { font-size: 0.8rem; color: var(--faint); cursor: pointer; }
+.login-details[open] summary { color: var(--muted); margin-bottom: 0.6rem; }
+td.diff-up { color: var(--accent-strong); font-weight: 600; }
+td.diff-down { color: var(--green); font-weight: 600; }
+#compare-changed td:nth-child(1), #compare-added td:nth-child(1), #compare-removed td:nth-child(1) {
+  font-family: var(--mono); font-size: 0.83rem;
+}
+
 #missing-parts { margin-top: 1.25rem; font-size: 0.85rem; color: var(--muted); }
 #missing-parts summary { cursor: pointer; transition: color 0.18s; }
 #missing-parts summary:hover { color: var(--text); }

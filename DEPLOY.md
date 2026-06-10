@@ -3,11 +3,12 @@
 Target setup: existing Ubuntu/Debian server already running nginx, certbot and pm2,
 app on port **3117**, domain **vxl.lol**.
 
-> **Read this first — security.** The dashboard has **no login of its own**, it can
-> trigger crawls, and it stores your dealer usernames/passwords in its database and
-> shows them in the Sites tab. Never expose it to the internet without the nginx
-> basic-auth step below. The app itself only listens on 127.0.0.1, so nothing can
-> reach it except nginx — keep it that way.
+> **Security note.** The dashboard has no login of its own. Without the optional
+> basic-auth step below, anyone who finds the URL can browse your price data,
+> trigger scrapes from your server, and — if you ever add a site with a dealer
+> login — read those stored credentials in the Sites tab. Running without a
+> password is only sensible while no dealer credentials are stored; add the
+> auth step before you ever save one.
 
 ## 1. Get the code onto the server
 
@@ -40,14 +41,17 @@ pm2 save
 
 Check it's up: `curl http://127.0.0.1:3117/api/sites` should return JSON.
 
-## 4. Password-protect it (do not skip)
+## 4. (Optional) password-protect it
+
+Skip this if you're happy with the dashboard being public — see the security note
+at the top. To enable it later:
 
 ```bash
 sudo apt install apache2-utils   # if htpasswd is missing
-sudo htpasswd -c /etc/nginx/.htpasswd-scraper josh
+sudo htpasswd -c /etc/nginx/.htpasswd-scraper josh   # you choose user + password here
 ```
 
-It will prompt for the password you'll use to open the dashboard.
+then un-comment the two `auth_basic` lines in the nginx block below and reload nginx.
 
 ## 5. nginx site
 
@@ -58,8 +62,9 @@ server {
     listen 80;
     server_name vxl.lol;
 
-    auth_basic           "Price scraper";
-    auth_basic_user_file /etc/nginx/.htpasswd-scraper;
+    # un-comment to require a password (see step 4):
+    # auth_basic           "Price scraper";
+    # auth_basic_user_file /etc/nginx/.htpasswd-scraper;
 
     # parts-list uploads are capped at 10 MB by the app
     client_max_body_size 12m;
@@ -85,10 +90,9 @@ sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d vxl.lol
 ```
 
-Certbot rewrites the server block for HTTPS and sets up renewal. Basic auth over
-plain HTTP sends the password in cleartext, so do this straight away.
+Certbot rewrites the server block for HTTPS and sets up renewal.
 
-Done — https://vxl.lol opens the dashboard after the basic-auth prompt.
+Done — https://vxl.lol opens the dashboard.
 
 ## Updating later
 

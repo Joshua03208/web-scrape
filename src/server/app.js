@@ -9,6 +9,7 @@ import {
   listRuns, latestSnapshot, fullHistory, replaceMyParts, missingMyParts,
 } from '../db.js';
 import { executeRun } from '../crawler/run.js';
+import { normalisePartNumber } from '../extract/partNumber.js';
 import { rowsToCsv } from '../export/csv.js';
 import { rowsToXlsxBuffer } from '../export/xlsx.js';
 
@@ -49,24 +50,25 @@ function validateSite(body) {
   return null;
 }
 
-async function parsePartsUpload(file) {
-  // Fix 2: reject unsupported file types
+async function rowsFromUpload(file) {
   const name = file.originalname.toLowerCase();
   if (!name.endsWith('.csv') && !name.endsWith('.xlsx')) {
     const err = new Error('Unsupported file type — save as .csv or .xlsx');
     err.code = 'UNSUPPORTED_FILE_TYPE';
     throw err;
   }
-
-  let rows;
   if (name.endsWith('.xlsx')) {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(file.buffer);
-    rows = [];
+    const rows = [];
     wb.worksheets[0].eachRow((row) => rows.push(row.values.slice(1).map((v) => String(v ?? ''))));
-  } else {
-    rows = parse(file.buffer.toString('utf8'), { skip_empty_lines: true });
+    return rows;
   }
+  return parse(file.buffer.toString('utf8'), { skip_empty_lines: true });
+}
+
+async function parsePartsUpload(file) {
+  const rows = await rowsFromUpload(file);
   if (rows.length === 0) return [];
   // Pick the part-number column: header containing "part", else first column.
   const header = rows[0].map((h) => String(h).toLowerCase());
@@ -77,6 +79,32 @@ async function parsePartsUpload(file) {
     .map((r) => String(r[col] ?? '').trim())
     .filter(Boolean)
     .map((partNumber) => ({ partNumber }));
+}
+
+// Parse an old price list (e.g. an EPOS export) into { code, norm, price } rows.
+// Part column: header containing epos/part/code, else first column; any letter
+// prefix like "FRANKE-" is stripped. Price column: header containing rrp, else price.
+async function parseCompareUpload(file) {
+  const rows = await rowsFromUpload(file);
+  if (rows.length === 0) return [];
+  const header = rows[0].map((h) => String(h).toLowerCase().trim());
+  let partCol = header.findIndex((h) => h.includes('epos') || h.includes('part') || h.includes('code'));
+  const hasHeader = partCol >= 0 || header.some((h) => h.includes('rrp') || h.includes('price') || h.includes('desc'));
+  if (partCol < 0) partCol = 0;
+  let priceCol = header.findIndex((h) => h.includes('rrp'));
+  if (priceCol < 0) priceCol = header.findIndex((h) => h.includes('price'));
+  const parts = [];
+  for (const r of hasHeader ? rows.slice(1) : rows) {
+    const code = String(r[partCol] ?? '').trim().replace(/^[^0-9]*/, '');
+    if (!code) continue;
+    let price = null;
+    if (priceCol >= 0) {
+      const n = Number(String(r[priceCol] ?? '').replace(/[£$€,\s]/g, ''));
+      if (Number.isFinite(n)) price = n;
+    }
+    parts.push({ code, norm: normalisePartNumber(code), price });
+  }
+  return parts;
 }
 
 // Fix 4: wrap multer so errors come back as JSON 400 instead of HTML 500
@@ -121,8 +149,11 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
     // Fix 5: reset runId when a new run starts
     current.runId = null;
     current.events = [];
+    // optional: run only specific sites (per-site Scrape button)
+    const siteIds = Array.isArray(req.body?.siteIds) ? req.body.siteIds : undefined;
     // Fix 5: use Promise.resolve().then() so a synchronous throw doesn't leave running=true
     Promise.resolve().then(() => runExecutor(db, {
+      siteIds,
       onProgress: (e) => {
         current.events.push(e);
         // Fix 5: cap events at 2000 to avoid unbounded memory growth
@@ -176,6 +207,18 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
     }
   });
   app.get('/api/parts/missing', (req, res) => res.json(missingMyParts(db)));
+
+  // --- price list comparison (no data is stored; parse and return) ---
+  app.post('/api/compare', uploadSingle, async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'file is required' });
+    try {
+      const parts = await parseCompareUpload(req.file);
+      if (parts.length === 0) return res.status(400).json({ error: 'No part numbers found in file' });
+      res.json({ parts });
+    } catch (err) {
+      res.status(400).json({ error: `Could not parse file: ${err.message}` });
+    }
+  });
 
   return app;
 }

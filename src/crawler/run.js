@@ -12,9 +12,13 @@ async function defaultCrawlSite(site, { onProgress }) {
   return crawl(site, { cookies, onProgress });
 }
 
-export async function executeRun(db, { crawlSite = defaultCrawlSite, onProgress = () => {} } = {}) {
+export async function executeRun(db, { crawlSite = defaultCrawlSite, onProgress = () => {}, siteIds } = {}) {
   const runId = createRun(db);
-  const sites = listSites(db).filter((s) => s.enabled);
+  let sites = listSites(db).filter((s) => s.enabled);
+  if (Array.isArray(siteIds) && siteIds.length > 0) {
+    const wanted = new Set(siteIds.map(Number));
+    sites = sites.filter((s) => wanted.has(s.id));
+  }
   const enabledCount = sites.length;
   let failures = 0;
   try {

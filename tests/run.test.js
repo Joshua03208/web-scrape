@@ -69,6 +69,20 @@ describe('executeRun', () => {
     expect(listRuns(db).find((r) => r.id === runId).status).toBe('failed');
   });
 
+  it('runs only the requested sites when siteIds is given', async () => {
+    const idA = createSite(db, SITE);
+    createSite(db, { ...SITE, name: 'B' });
+    const crawled = [];
+    await executeRun(db, {
+      siteIds: [idA],
+      crawlSite: async (site) => {
+        crawled.push(site.name);
+        return { products: [product], stats: { pagesVisited: 1, pagesFailed: 0, warnings: [] } };
+      },
+    });
+    expect(crawled).toEqual(['A']);
+  });
+
   it('skips malformed products with a warning instead of failing the site', async () => {
     createSite(db, SITE);
     const runId = await executeRun(db, {
