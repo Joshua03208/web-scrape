@@ -1,14 +1,21 @@
 import { listSites, createRun, finishRun, insertObservations, saveRunSiteSummary } from '../db.js';
 import { crawlPrefixSearch } from './prefixSearch.js';
 import { crawlLinkCrawl } from './linkCrawl.js';
+import { crawlCategoryCrawl } from './categoryCrawl.js';
 import { loginAndGetCookies } from './login.js';
+
+const STRATEGIES = {
+  prefix_search: crawlPrefixSearch,
+  category_crawl: crawlCategoryCrawl,
+  link_crawl: crawlLinkCrawl,
+};
 
 async function defaultCrawlSite(site, { onProgress }) {
   let cookies = null;
   if (site.login_url && site.username) {
     cookies = await loginAndGetCookies(site);
   }
-  const crawl = site.strategy === 'prefix_search' ? crawlPrefixSearch : crawlLinkCrawl;
+  const crawl = STRATEGIES[site.strategy] ?? crawlLinkCrawl;
   return crawl(site, { cookies, onProgress });
 }
 

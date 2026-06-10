@@ -1,5 +1,6 @@
 import { PlaywrightCrawler, Configuration } from 'crawlee';
 import { extractListingProducts } from '../extract/listing.js';
+import { buildPartNumberRegex } from '../extract/partNumber.js';
 import { buildSearchUrl } from '../extract/pagination.js';
 
 export async function crawlPrefixSearch(site, { cookies = null, onProgress = () => {} } = {}) {
@@ -10,6 +11,12 @@ export async function crawlPrefixSearch(site, { cookies = null, onProgress = () 
   const seenByPrefix = new Map();
   // Site-wide dedup set keyed partNumber|url (used at products.push time)
   const seenSiteWide = new Set();
+  // Every prefix-matching code seen ANYWHERE in page text (incl. "Suitable For"
+  // cross-references in descriptions). Codes never captured as products get a
+  // targeted full-code search afterwards — some shops have products that their
+  // own search doesn't return for partial terms.
+  const harvestRe = new RegExp(buildPartNumberRegex(site.prefixes).source, 'gi');
+  const harvested = new Set();
 
   // Each crawl gets its own in-memory Configuration so request queues are never shared
   // across sequential runs in the same long-lived process (e.g. Express server). Without
@@ -36,6 +43,7 @@ export async function crawlPrefixSearch(site, { cookies = null, onProgress = () 
       stats.pagesVisited += 1;
       const { prefix, pageNo } = request.userData;
       const html = await page.content();
+      for (const code of html.match(harvestRe) ?? []) harvested.add(code);
       const found = extractListingProducts(html, { prefixes: [prefix], baseUrl: site.base_url });
 
       // Per-prefix dedup to decide pagination continuity
@@ -82,5 +90,51 @@ export async function crawlPrefixSearch(site, { cookies = null, onProgress = () 
     userData: { prefix, pageNo: 1 },
     uniqueKey: `${site.id}:${prefix}:1`,
   })));
+
+  // --- Phase 2: cross-reference harvest ---
+  // Codes that appeared in page text but were never captured as products are
+  // searched individually (one page each, no pagination).
+  const captured = new Set(products.map((p) => p.partNumber));
+  const orphans = [...harvested].filter((c) => !captured.has(c));
+  if (orphans.length > 0) {
+    const harvestCrawler = new PlaywrightCrawler({
+      maxConcurrency: 2,
+      maxRequestRetries: 2,
+      respectRobotsTxtFile: true,
+      maxRequestsPerCrawl: orphans.length + 5,
+      preNavigationHooks: [
+        async ({ page }) => {
+          if (cookies?.length) await page.context().addCookies(cookies);
+        },
+      ],
+      requestHandler: async ({ page, request }) => {
+        stats.pagesVisited += 1;
+        const html = await page.content();
+        const found = extractListingProducts(html, { prefixes: site.prefixes, baseUrl: site.base_url });
+        for (const p of found) {
+          // keep only the searched code itself; full-code result pages can echo the
+          // code in titles/breadcrumbs (price 0) or show cross-referencing products
+          if (p.partNumber !== request.userData.code || !(p.price > 0)) continue;
+          const key = `${p.partNumber}|${p.url}`;
+          if (!seenSiteWide.has(key)) {
+            seenSiteWide.add(key);
+            products.push(p);
+          }
+        }
+        onProgress({ pagesVisited: stats.pagesVisited, partsFound: products.length });
+      },
+      failedRequestHandler: ({ request }, err) => {
+        stats.pagesFailed += 1;
+        stats.warnings.push(`Harvest page failed: ${request.url} — ${err?.message ?? 'unknown error'}`);
+      },
+    }, new Configuration({ persistStorage: false }));
+
+    await harvestCrawler.run(orphans.map((code) => ({
+      url: buildSearchUrl(site.search_url_pattern, site.base_url, code, 1),
+      userData: { code },
+      uniqueKey: `${site.id}:harvest:${code}`,
+    })));
+  }
+
   return { products, stats };
 }

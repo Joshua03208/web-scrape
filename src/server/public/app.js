@@ -37,7 +37,7 @@ async function loadSites() {
     <tr>
       <td><span class="dot ${s.enabled ? 'on' : 'off'}"></span></td>
       <td>${esc(s.name)}</td>
-      <td>${s.strategy === 'prefix_search' ? 'Prefix search' : 'Link crawl'}</td>
+      <td>${{ prefix_search: 'Prefix search', category_crawl: 'Category crawl', link_crawl: 'Link crawl' }[s.strategy] ?? esc(s.strategy)}</td>
       <td>${esc(s.prefixes.join(', '))}</td>
       <td>
         ${s.enabled ? `<button data-run="${s.id}">Scrape</button>` : ''}

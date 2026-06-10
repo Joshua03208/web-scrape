@@ -53,11 +53,19 @@ export function extractListingProducts(html, { prefixes, baseUrl }) {
       $card = $parent;
     }
 
-    const prices = findAllPrices($card.text());
-    if (prices.length === 0) return;
+    if (findAllPrices($card.text()).length === 0) return;
+
+    // On pages with a single product (e.g. a full-code search result) the card
+    // expands far beyond the product markup. Fields are therefore taken from the
+    // INNER card: the smallest ancestor of the code element that carries a price.
+    let $inner = $el;
+    while (!$inner.is($card) && findAllPrices($inner.text()).length === 0) {
+      $inner = $inner.parent();
+    }
+    const prices = findAllPrices($inner.text());
     const distinctAmounts = new Set(prices.map((p) => p.amount));
 
-    const $name = $card
+    const $name = $inner
       .find('h1,h2,h3,h4,a')
       .filter((_, n) => {
         const t = $(n).text().trim();
@@ -70,6 +78,7 @@ export function extractListingProducts(html, { prefixes, baseUrl }) {
     const hrefCandidates = [
       $name.is('a') ? $name.attr('href') : null,
       $name.closest('a').attr('href'),
+      $inner.find('a[href]').first().attr('href'),
       $card.find('a[href]').first().attr('href'),
     ];
     let url = null;

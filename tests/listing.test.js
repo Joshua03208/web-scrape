@@ -39,6 +39,9 @@ describe('cards with cross-referenced part numbers in description excerpts', () 
       const target = products.find((p) => p.partNumber === '133.0007.851' && p.price > 0);
       expect(target).toBeDefined();
       expect(target.price).toBe(5.08);
+      // fields must come from the product card, not the surrounding page
+      expect(target.name).toContain('Plug Seal');
+      expect(target.url).toContain('plug-seal');
     });
   });
 });

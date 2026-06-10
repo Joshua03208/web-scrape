@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS sites (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   base_url TEXT NOT NULL,
-  strategy TEXT NOT NULL CHECK (strategy IN ('prefix_search','link_crawl')),
+  strategy TEXT NOT NULL CHECK (strategy IN ('prefix_search','category_crawl','link_crawl')),
   search_url_pattern TEXT,
   prefixes TEXT NOT NULL DEFAULT '[]',
   login_url TEXT, username TEXT, password TEXT,
@@ -59,7 +59,35 @@ export function openDb(path = DEFAULT_DB) {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  migrateSitesStrategyCheck(db);
   return db;
+}
+
+// Existing databases were created with a CHECK constraint that predates the
+// category_crawl strategy. SQLite can't alter a CHECK, so rebuild the table once.
+function migrateSitesStrategyCheck(db) {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='sites'").get();
+  if (!row || row.sql.includes('category_crawl')) return;
+  db.pragma('foreign_keys = OFF');
+  db.exec(`
+    BEGIN;
+    CREATE TABLE sites_migrated (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      base_url TEXT NOT NULL,
+      strategy TEXT NOT NULL CHECK (strategy IN ('prefix_search','category_crawl','link_crawl')),
+      search_url_pattern TEXT,
+      prefixes TEXT NOT NULL DEFAULT '[]',
+      login_url TEXT, username TEXT, password TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      max_pages INTEGER NOT NULL DEFAULT 200
+    );
+    INSERT INTO sites_migrated SELECT * FROM sites;
+    DROP TABLE sites;
+    ALTER TABLE sites_migrated RENAME TO sites;
+    COMMIT;
+  `);
+  db.pragma('foreign_keys = ON');
 }
 
 // --- sites ---

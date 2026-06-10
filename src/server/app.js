@@ -41,7 +41,7 @@ const HISTORY_COLUMNS = [
 
 function validateSite(body) {
   if (!body.name || !body.base_url) return 'name and base_url are required';
-  if (!['prefix_search', 'link_crawl'].includes(body.strategy)) return 'invalid strategy';
+  if (!['prefix_search', 'category_crawl', 'link_crawl'].includes(body.strategy)) return 'invalid strategy';
   if (body.strategy === 'prefix_search' && !body.search_url_pattern)
     return 'search_url_pattern required for prefix_search';
   // an empty prefix list would make the part-number matcher match any digit run
