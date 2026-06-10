@@ -120,21 +120,24 @@
         <span id="compare-status" class="hint"></span>
       </div>
       <div id="compare-output" hidden>
-        <h3 id="compare-changed-title">Changed prices</h3>
-        <table id="compare-changed">
-          <thead><tr><th>Part Number</th><th>Name</th><th>Old</th><th>New</th><th>Difference</th></tr></thead>
-          <tbody></tbody>
-        </table>
-        <h3 id="compare-added-title">Added (scraped now, not in your file)</h3>
-        <table id="compare-added">
-          <thead><tr><th>Part Number</th><th>Name</th><th>Price</th><th>Site</th></tr></thead>
-          <tbody></tbody>
-        </table>
-        <h3 id="compare-removed-title">Removed (in your file, no longer scraped)</h3>
-        <table id="compare-removed">
-          <thead><tr><th>Part Number</th><th>Old price</th></tr></thead>
-          <tbody></tbody>
-        </table>
+        <div id="compare-stats" class="stats"></div>
+        <div class="toolbar">
+          <input id="compare-search" placeholder="Search part number or name...">
+          <span id="compare-dir" class="chips chips-inline">
+            <button class="chip active" data-dir="all">All</button>
+            <button class="chip" data-dir="up">Risen</button>
+            <button class="chip" data-dir="down">Fallen</button>
+          </span>
+          <select id="compare-sort">
+            <option value="abs">Biggest change (&pound;)</option>
+            <option value="pct">Biggest change (%)</option>
+            <option value="part">Part number</option>
+          </select>
+          <button type="button" id="compare-export">Download report CSV</button>
+        </div>
+        <div id="compare-tabs" class="chips"></div>
+        <p id="compare-count" class="results-count"></p>
+        <table id="compare-table"><thead></thead><tbody></tbody></table>
       </div>
     </section>
   </main>

@@ -292,6 +292,12 @@ $('#epos-download').addEventListener('click', () => {
 
 // --- compare price lists ---
 const money = (n) => `£${n.toFixed(2)}`;
+const diffCell = (diff, pct) =>
+  `<td class="${diff > 0 ? 'diff-up' : 'diff-down'}">${diff > 0 ? '+£' : '-£'}${Math.abs(diff).toFixed(2)} (${pct > 0 ? '+' : ''}${pct.toFixed(1)}%)</td>`;
+
+let cmp = null;           // { changed, added, removed }
+let cmpView = 'changed';  // which sub-tab is showing
+let cmpDir = 'all';       // all | up | down (changed view only)
 
 $('#compare-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
@@ -304,9 +310,15 @@ $('#compare-file').addEventListener('change', async (e) => {
       api('/api/compare', { method: 'POST', body: form }),
       api('/api/results'),
     ]);
-    renderComparison(parts, current);
+    cmp = buildComparison(parts, current);
+    cmpView = 'changed';
+    cmpDir = 'all';
+    $('#compare-search').value = '';
     $('#compare-status').textContent =
       `Compared ${parts.length} parts in your file against ${current.length} scraped parts.`;
+    renderCompareStats();
+    renderCompare();
+    $('#compare-output').hidden = false;
   } catch (err) {
     $('#compare-status').textContent = `Failed: ${err.message}`;
     $('#compare-output').hidden = true;
@@ -314,48 +326,139 @@ $('#compare-file').addEventListener('change', async (e) => {
   e.target.value = '';
 });
 
-function renderComparison(oldParts, current) {
+function buildComparison(oldParts, current) {
   const oldByNorm = new Map(oldParts.map((p) => [p.norm, p]));
   const curByNorm = new Map(current.map((r) => [r.part_number_norm, r]));
   const changed = [], added = [], removed = [];
   for (const [norm, cur] of curByNorm) {
     const old = oldByNorm.get(norm);
-    if (!old) added.push(cur);
-    else if (old.price != null && Math.abs(old.price - cur.price) >= 0.005) changed.push({ old, cur });
+    if (!old) {
+      added.push(cur);
+    } else if (old.price != null && Math.abs(old.price - cur.price) >= 0.005) {
+      const diff = cur.price - old.price;
+      changed.push({
+        part_number: cur.part_number, name: cur.name, site_name: cur.site_name,
+        oldPrice: old.price, newPrice: cur.price,
+        diff, pct: old.price ? (diff / old.price) * 100 : 0,
+      });
+    }
   }
   for (const [norm, old] of oldByNorm) {
     if (!curByNorm.has(norm)) removed.push(old);
   }
-  changed.sort((a, b) => Math.abs(b.cur.price - b.old.price) - Math.abs(a.cur.price - a.old.price));
-
-  $('#compare-changed-title').textContent = `Changed prices (${changed.length})`;
-  $('#compare-changed tbody').innerHTML = changed.length === 0
-    ? '<tr><td class="empty" colspan="5">No price changes.</td></tr>'
-    : changed.map(({ old, cur }) => {
-      const diff = cur.price - old.price;
-      const pct = old.price ? (diff / old.price) * 100 : 0;
-      return `<tr>
-        <td>${esc(cur.part_number)}</td><td>${esc(cur.name)}</td>
-        <td>${money(old.price)}</td><td>${money(cur.price)}</td>
-        <td class="${diff > 0 ? 'diff-up' : 'diff-down'}">${diff > 0 ? '+£' : '-£'}${Math.abs(diff).toFixed(2)} (${pct > 0 ? '+' : ''}${pct.toFixed(1)}%)</td>
-      </tr>`;
-    }).join('');
-
-  $('#compare-added-title').textContent = `Added — scraped now, not in your file (${added.length})`;
-  $('#compare-added tbody').innerHTML = added.length === 0
-    ? '<tr><td class="empty" colspan="4">Nothing new.</td></tr>'
-    : added.map((r) => `<tr>
-        <td>${esc(r.part_number)}</td><td>${esc(r.name)}</td>
-        <td>${money(r.price)}</td><td>${esc(r.site_name)}</td></tr>`).join('');
-
-  $('#compare-removed-title').textContent = `Removed — in your file, no longer scraped (${removed.length})`;
-  $('#compare-removed tbody').innerHTML = removed.length === 0
-    ? '<tr><td class="empty" colspan="2">Nothing missing.</td></tr>'
-    : removed.map((p) => `<tr>
-        <td>${esc(p.code)}</td><td>${p.price != null ? money(p.price) : ''}</td></tr>`).join('');
-
-  $('#compare-output').hidden = false;
+  return { changed, added, removed };
 }
+
+function renderCompareStats() {
+  const up = cmp.changed.filter((c) => c.diff > 0);
+  const down = cmp.changed.filter((c) => c.diff < 0);
+  const avgPct = cmp.changed.length
+    ? cmp.changed.reduce((s, c) => s + c.pct, 0) / cmp.changed.length : 0;
+  const rise = up.length ? up.reduce((a, b) => (b.diff > a.diff ? b : a)) : null;
+  const fall = down.length ? down.reduce((a, b) => (b.diff < a.diff ? b : a)) : null;
+  const card = (label, value, sub = '') =>
+    `<div class="stat"><span class="stat-label">${label}</span>
+      <span class="stat-value">${value}</span>
+      ${sub ? `<span class="stat-sub">${sub}</span>` : ''}</div>`;
+  $('#compare-stats').innerHTML = [
+    card('Changed', cmp.changed.length,
+      `<span class="diff-up">&#9650; ${up.length}</span> &nbsp; <span class="diff-down">&#9660; ${down.length}</span>`),
+    card('Average change', `${avgPct > 0 ? '+' : ''}${avgPct.toFixed(1)}%`),
+    rise ? card('Biggest rise', `+${money(rise.diff)}`, esc(rise.part_number)) : '',
+    fall ? card('Biggest fall', `-${money(Math.abs(fall.diff))}`, esc(fall.part_number)) : '',
+    card('Added', cmp.added.length, 'not in your file'),
+    card('Removed', cmp.removed.length, 'no longer scraped'),
+  ].join('');
+}
+
+function renderCompare() {
+  const tabs = [
+    ['changed', `Changed`, cmp.changed.length],
+    ['added', `Added`, cmp.added.length],
+    ['removed', `Removed`, cmp.removed.length],
+  ];
+  $('#compare-tabs').innerHTML = tabs.map(([key, label, n]) =>
+    `<button class="chip ${key === cmpView ? 'active' : ''}" data-view="${key}">${label} <span>${n}</span></button>`).join('');
+  $('#compare-tabs').querySelectorAll('.chip').forEach((c) =>
+    c.addEventListener('click', () => { cmpView = c.dataset.view; renderCompare(); }));
+
+  $('#compare-dir').hidden = cmpView !== 'changed';
+  $('#compare-sort').hidden = cmpView !== 'changed';
+
+  const q = $('#compare-search').value.toLowerCase();
+  const matches = (pn, name) =>
+    !q || pn.toLowerCase().includes(q) || (name ?? '').toLowerCase().includes(q);
+  const thead = $('#compare-table thead');
+  const tbody = $('#compare-table tbody');
+
+  if (cmpView === 'changed') {
+    let rows = cmp.changed.filter((c) =>
+      (cmpDir === 'all' || (cmpDir === 'up' ? c.diff > 0 : c.diff < 0)) &&
+      matches(c.part_number, c.name));
+    const sort = $('#compare-sort').value;
+    rows = [...rows].sort((a, b) =>
+      sort === 'pct' ? Math.abs(b.pct) - Math.abs(a.pct)
+      : sort === 'part' ? a.part_number.localeCompare(b.part_number)
+      : Math.abs(b.diff) - Math.abs(a.diff));
+    thead.innerHTML = '<tr><th>Part Number</th><th>Name</th><th>Old</th><th>New</th><th>Difference</th></tr>';
+    tbody.innerHTML = rows.length === 0
+      ? '<tr><td class="empty" colspan="5">No matching price changes.</td></tr>'
+      : rows.map((c) => `<tr>
+          <td>${esc(c.part_number)}</td><td>${esc(c.name)}</td>
+          <td>${money(c.oldPrice)}</td><td>${money(c.newPrice)}</td>
+          ${diffCell(c.diff, c.pct)}</tr>`).join('');
+    $('#compare-count').textContent = `Showing ${rows.length} of ${cmp.changed.length} changed prices`;
+  } else if (cmpView === 'added') {
+    const rows = cmp.added.filter((r) => matches(r.part_number, r.name));
+    thead.innerHTML = '<tr><th>Part Number</th><th>Name</th><th>Price</th><th>Site</th></tr>';
+    tbody.innerHTML = rows.length === 0
+      ? '<tr><td class="empty" colspan="4">Nothing new.</td></tr>'
+      : rows.map((r) => `<tr>
+          <td>${esc(r.part_number)}</td><td>${esc(r.name)}</td>
+          <td>${money(r.price)}</td><td>${esc(r.site_name)}</td></tr>`).join('');
+    $('#compare-count').textContent = `Showing ${rows.length} of ${cmp.added.length} added parts`;
+  } else {
+    const rows = cmp.removed.filter((p) => matches(p.code, null));
+    thead.innerHTML = '<tr><th>Part Number</th><th>Old price</th></tr>';
+    tbody.innerHTML = rows.length === 0
+      ? '<tr><td class="empty" colspan="2">Nothing missing.</td></tr>'
+      : rows.map((p) => `<tr>
+          <td>${esc(p.code)}</td><td>${p.price != null ? money(p.price) : ''}</td></tr>`).join('');
+    $('#compare-count').textContent = `Showing ${rows.length} of ${cmp.removed.length} removed parts`;
+  }
+}
+
+$('#compare-search').addEventListener('input', () => cmp && renderCompare());
+$('#compare-sort').addEventListener('change', () => cmp && renderCompare());
+$('#compare-dir').querySelectorAll('.chip').forEach((c) =>
+  c.addEventListener('click', () => {
+    cmpDir = c.dataset.dir;
+    $('#compare-dir').querySelectorAll('.chip').forEach((b) => b.classList.toggle('active', b === c));
+    renderCompare();
+  }));
+
+$('#compare-export').addEventListener('click', () => {
+  if (!cmp) return;
+  const lines = ['Status,Part Number,Name,Old Price,New Price,Change,Change %,Site'];
+  for (const c of cmp.changed) {
+    lines.push(['changed', eposCsvCell(c.part_number), eposCsvCell(c.name), c.oldPrice.toFixed(2),
+      c.newPrice.toFixed(2), c.diff.toFixed(2), c.pct.toFixed(1), eposCsvCell(c.site_name)].join(','));
+  }
+  for (const r of cmp.added) {
+    lines.push(['added', eposCsvCell(r.part_number), eposCsvCell(r.name), '',
+      r.price.toFixed(2), '', '', eposCsvCell(r.site_name)].join(','));
+  }
+  for (const p of cmp.removed) {
+    lines.push(['removed', eposCsvCell(p.code), '', p.price != null ? p.price.toFixed(2) : '',
+      '', '', '', ''].join(','));
+  }
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'price-comparison-report.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
 
 initEpos();
 
