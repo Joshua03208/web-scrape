@@ -38,17 +38,19 @@ async function loadSpares() {
 function renderSpares() {
   const q = $('#spares-filter').value.toLowerCase();
   const rows = allSpares.filter((r) =>
-    !q || r.spare.toLowerCase().includes(q) || r.shower.toLowerCase().includes(q) ||
+    !q || (r.spare ?? '').toLowerCase().includes(q) || r.shower.toLowerCase().includes(q) ||
     (r.sku ?? '').toLowerCase().includes(q));
+  const withSpares = allSpares.filter((r) => r.spare != null).length;
+  const without = new Set(allSpares.filter((r) => r.spare == null).map((r) => r.shower)).size;
   $('#spares-count').textContent = allSpares.length
-    ? `Showing ${rows.length} of ${allSpares.length} spare links`
+    ? `Showing ${rows.length} of ${allSpares.length} rows — ${withSpares} spare links, ${without} product(s) with none published`
     : '';
   $('#spares-table tbody').innerHTML = rows.length === 0
     ? `<tr><td class="empty" colspan="4">${allSpares.length === 0
         ? 'No spares data yet — add a site with the Spares map strategy and run a scrape.'
         : 'No matches.'}</td></tr>`
     : rows.map((r) => `<tr>
-        <td>${esc(r.spare)}</td>
+        <td>${r.spare != null ? esc(r.spare) : '<span class="nospare">none published</span>'}</td>
         <td>${r.url ? `<a href="${esc(r.url)}" target="_blank">${esc(r.shower)}</a>` : esc(r.shower)}</td>
         <td>${esc(r.sku)}</td>
         <td>${esc(r.site_name)}</td></tr>`).join('');

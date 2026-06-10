@@ -44,4 +44,17 @@ describe('shower spares storage', () => {
     expect(rows[0].site_name).toBe('Intatec');
     expect(rows[0].spare).toBe('ST20004XX');
   });
+
+  it('stores products without published spares as null-spare rows', () => {
+    const siteId = createSite(db, {
+      name: 'Intatec', base_url: 'https://x/', strategy: 'spares_map', prefixes: [],
+    });
+    replaceShowerSpares(db, siteId, [
+      { shower: 'Mio Safe-Touch', sku: 'IX300020CP', spare: null, url: 'https://x/m' },
+      { shower: 'Enzo Deluxe', sku: 'IX100025CP', spare: 'WB103', url: 'https://x/e' },
+    ]);
+    const rows = listShowerSpares(db);
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.shower === 'Mio Safe-Touch').spare).toBeNull();
+  });
 });

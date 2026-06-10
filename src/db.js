@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS shower_spares (
   site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
   shower TEXT NOT NULL,
   sku TEXT,
-  spare TEXT NOT NULL,
+  spare TEXT,
   url TEXT,
   observed_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -70,6 +70,7 @@ export function openDb(path = DEFAULT_DB) {
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
   migrateSitesStrategyCheck(db);
+  migrateShowerSparesNullable(db);
   return db;
 }
 
@@ -101,6 +102,32 @@ function migrateSitesStrategyCheck(db) {
   db.pragma('foreign_keys = ON');
 }
 
+// shower_spares.spare was NOT NULL at first; null now means "product has no
+// spares published" so those products still show on the Spares tab.
+function migrateShowerSparesNullable(db) {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='shower_spares'").get();
+  if (!row || !row.sql.includes('spare TEXT NOT NULL')) return;
+  db.pragma('foreign_keys = OFF');
+  db.exec(`
+    BEGIN;
+    CREATE TABLE shower_spares_migrated (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+      shower TEXT NOT NULL,
+      sku TEXT,
+      spare TEXT,
+      url TEXT,
+      observed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT INTO shower_spares_migrated SELECT * FROM shower_spares;
+    DROP TABLE shower_spares;
+    ALTER TABLE shower_spares_migrated RENAME TO shower_spares;
+    COMMIT;
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_spares ON shower_spares(spare)');
+  db.pragma('foreign_keys = ON');
+}
+
 // --- shower spares (spares_map strategy) ---
 // Latest mapping only: each successful crawl replaces the site's rows.
 export function replaceShowerSpares(db, siteId, rows) {
@@ -108,7 +135,7 @@ export function replaceShowerSpares(db, siteId, rows) {
     db.prepare('DELETE FROM shower_spares WHERE site_id = ?').run(siteId);
     const stmt = db.prepare(
       'INSERT INTO shower_spares (site_id, shower, sku, spare, url) VALUES (?, ?, ?, ?, ?)');
-    for (const r of items) stmt.run(siteId, r.shower, r.sku ?? null, r.spare, r.url ?? null);
+    for (const r of items) stmt.run(siteId, r.shower, r.sku ?? null, r.spare ?? null, r.url ?? null);
   });
   tx(rows);
 }

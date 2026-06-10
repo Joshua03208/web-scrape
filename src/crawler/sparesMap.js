@@ -71,7 +71,9 @@ export async function crawlSparesMap(site, { cookies = null, onProgress = () => 
             spares.push({ shower, sku, spare, url: request.loadedUrl ?? request.url });
           }
         } else if (shower) {
-          stats.warnings.push(`No spares listed: ${shower}`);
+          // recorded with spare = null so the Spares tab shows the product
+          // as "none published" rather than hiding it
+          spares.push({ shower, sku, spare: null, url: request.loadedUrl ?? request.url });
         }
         onProgress({ pagesVisited: stats.pagesVisited, partsFound: spares.length });
         return;
