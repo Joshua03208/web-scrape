@@ -65,13 +65,15 @@ export async function harvestImages(db, site, { prefix = '', onProgress = () => 
   if (limit > 0) rows = rows.slice(0, limit);
   const stats = { total: rows.length, done: 0, saved: 0, skipped: 0, noImages: 0, failed: 0 };
   const queue = [...rows];
+  let consecutiveErrors = 0;
+  let abortReason = null;
 
   const browser = await chromium.launch();
   const ctx = await browser.newContext();
 
   async function worker() {
     const page = await ctx.newPage();
-    while (queue.length > 0) {
+    while (queue.length > 0 && !abortReason) {
       const r = queue.shift();
       const folder = join(IMAGES_ROOT, safeFolderName(r.part_number));
       try {
@@ -79,7 +81,18 @@ export async function harvestImages(db, site, { prefix = '', onProgress = () => 
           stats.skipped += 1;
           continue;
         }
-        await page.goto(r.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        const resp = await page.goto(r.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        if (!resp || resp.status() >= 400) {
+          stats.failed += 1;
+          consecutiveErrors += 1;
+          if (consecutiveErrors >= 10) {
+            abortReason = `site answered ${resp?.status() ?? 'nothing'} ${consecutiveErrors} times in a row — `
+              + 'probably rate-limiting; stopped early. Run Images again in a few hours: '
+              + 'parts already saved are skipped automatically.';
+          }
+          continue;
+        }
+        consecutiveErrors = 0;
         await page.waitForTimeout(400);
         const found = await page.evaluate(() => {
           const out = { urls: [], og: null };
@@ -112,13 +125,14 @@ export async function harvestImages(db, site, { prefix = '', onProgress = () => 
       } finally {
         stats.done += 1;
         try { onProgress({ ...stats }); } catch { /* progress is best-effort */ }
-        await page.waitForTimeout(250);
+        // bulk job, no rush: be gentle so the site doesn't rate-limit us
+        await page.waitForTimeout(900);
       }
     }
     await page.close();
   }
 
-  await Promise.all([worker(), worker()]);
+  await worker(); // single worker on purpose — politeness over speed
   await browser.close();
-  return stats;
+  return { ...stats, aborted: abortReason };
 }

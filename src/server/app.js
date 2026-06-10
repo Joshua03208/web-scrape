@@ -228,7 +228,7 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
     img.error = null;
     Promise.resolve()
       .then(() => harvestImages(db, site, { prefix, onProgress: (s) => { img.stats = s; } }))
-      .then((s) => { img.stats = s; })
+      .then((s) => { img.stats = s; if (s.aborted) img.error = s.aborted; })
       .catch((err) => { img.error = err.message; })
       .finally(() => { img.running = false; });
     res.status(202).json({ started: true });
