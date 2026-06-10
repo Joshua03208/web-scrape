@@ -5,6 +5,44 @@ import { extractListingProducts } from '../src/extract/listing.js';
 const html = readFileSync('tests/fixtures/opencart-search.html', 'utf8');
 const opts = { prefixes: ['133.'], baseUrl: 'https://central-servicesuk.co.uk/' };
 
+describe('cards with cross-referenced part numbers in description excerpts', () => {
+  // Real-site failure mode: list-view cards include a description blurb like
+  // "Suitable For 133.0007.855 ..." so one card contains several part numbers,
+  // which used to abort card expansion before the price was found.
+  it('still extracts the product (synthetic card)', () => {
+    const xref = `<!DOCTYPE html><html><body><div class="row">
+      <div class="product-layout">
+        <div class="product-thumb">
+          <div class="image"><a href="/plug-seal"><img src="/i.jpg" alt=""></a></div>
+          <div class="caption">
+            <h4><a href="/plug-seal">Plug Seal ONLY for Basket Strainer Waste</a></h4>
+            <div class="stats"><span>133.0007.851</span></div>
+            <div class="description">Suitable For 133.0007.855 - Plug ONLY, 133.0007.856 - Pop Up Plunger</div>
+            <p class="price">£5.30</p>
+          </div>
+        </div>
+      </div>
+    </div></body></html>`;
+    const products = extractListingProducts(xref, opts);
+    expect(products).toHaveLength(1);
+    expect(products[0].partNumber).toBe('133.0007.851');
+    expect(products[0].price).toBe(5.3);
+  });
+
+  const crossrefPath = 'tests/fixtures/central-crossref-search.html';
+  describe.skipIf(!existsSync(crossrefPath))('real saved page (search for 133.0007.851)', () => {
+    it('extracts the product that was previously dropped', () => {
+      const real = readFileSync(crossrefPath, 'utf8');
+      const products = extractListingProducts(real, opts);
+      // this page also echoes the code in its <title>/breadcrumb, producing a
+      // zero-price noise entry (filtered downstream); assert on the real one
+      const target = products.find((p) => p.partNumber === '133.0007.851' && p.price > 0);
+      expect(target).toBeDefined();
+      expect(target.price).toBe(5.08);
+    });
+  });
+});
+
 describe('extractListingProducts', () => {
   it('extracts every product card with part number, name, price, absolute url', () => {
     const products = extractListingProducts(html, opts);

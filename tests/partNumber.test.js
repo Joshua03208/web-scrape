@@ -40,4 +40,11 @@ describe('buildPartNumberRegex', () => {
   it('matches a part number at the end of a sentence', () => {
     expect('order 133.0440.351.'.match(re)[0]).toBe('133.0440.351');
   });
+  it('keeps letter suffixes on part numbers (cold/hot variants)', () => {
+    expect('133.0438.152C'.match(re)[0]).toBe('133.0438.152C');
+    expect('Code: 133.0069.376H here'.match(re)[0]).toBe('133.0069.376H');
+  });
+  it('does not glom a following word onto the code', () => {
+    expect('133.0440.351 COLD'.match(re)[0]).toBe('133.0440.351');
+  });
 });

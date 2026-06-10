@@ -17,6 +17,11 @@ function resolveUrl(href, baseUrl) {
 export function extractListingProducts(html, { prefixes, baseUrl }) {
   const $ = cheerio.load(html);
   $('script,style,noscript').remove();
+  // Description excerpts on listing cards often cross-reference OTHER part numbers
+  // ("Suitable For 133.0007.855 ..."), which breaks the one-part-number-per-card
+  // expansion rule and silently drops the product. We never extract from
+  // descriptions (name comes from the heading/link), so remove them up front.
+  $('.description').remove();
   const partRe = buildPartNumberRegex(prefixes);
   const partReG = new RegExp(partRe.source, 'gi');
   const products = [];
