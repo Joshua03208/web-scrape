@@ -13,9 +13,10 @@ describe('seedDefaultSites', () => {
   it('adds the built-in sites once and never duplicates', () => {
     seedDefaultSites(db);
     const after1 = listSites(db);
-    expect(after1.map((s) => s.name).sort()).toEqual(['Central Services', 'Intatec Showers']);
+    expect(after1.map((s) => s.name).sort()).toEqual(['Central Services', 'Deva Spares', 'Intatec Showers']);
+    const count = after1.length;
     seedDefaultSites(db); // idempotent
-    expect(listSites(db)).toHaveLength(2);
+    expect(listSites(db)).toHaveLength(count);
   });
   it('does not overwrite an existing site on the same host', () => {
     createSite(db, { ...SITE, name: 'My Tweaked CS', max_pages: 7 });

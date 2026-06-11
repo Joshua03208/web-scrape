@@ -124,7 +124,7 @@ async function loadSites() {
     <tr>
       <td><span class="dot ${s.enabled ? 'on' : 'off'}"></span></td>
       <td>${esc(s.name)}</td>
-      <td>${{ prefix_search: 'Prefix search', category_crawl: 'Category crawl', link_crawl: 'Link crawl', spares_map: 'Spares map' }[s.strategy] ?? esc(s.strategy)}</td>
+      <td>${{ prefix_search: 'Prefix search', category_crawl: 'Category crawl', link_crawl: 'Link crawl', spares_map: 'Spares map', deva_spares: 'Deva (Shopify feed)' }[s.strategy] ?? esc(s.strategy)}</td>
       <td>${esc(s.prefixes.join(', '))}</td>
       <td>
         ${s.enabled ? `<button data-run="${s.id}">Scrape</button>` : ''}
@@ -164,7 +164,7 @@ async function loadSites() {
 function applyStrategyFields() {
   const strategy = $('#site-form').elements.strategy.value;
   $('#field-pattern').hidden = strategy !== 'prefix_search';
-  $('#field-prefixes').hidden = strategy === 'spares_map';
+  $('#field-prefixes').hidden = strategy === 'spares_map' || strategy === 'deva_spares';
 }
 $('#site-form').elements.strategy.addEventListener('change', applyStrategyFields);
 applyStrategyFields();

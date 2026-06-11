@@ -148,6 +148,11 @@ const DEFAULT_SITES = [
     strategy: 'spares_map', prefixes: [], enabled: 1, max_pages: 80,
     host: 'intatec.co.uk',
   },
+  {
+    name: 'Deva Spares', base_url: 'https://www.deva-uk.com/',
+    strategy: 'deva_spares', prefixes: [], enabled: 1, max_pages: 20,
+    host: 'deva-uk.com',
+  },
 ];
 
 export function seedDefaultSites(db) {

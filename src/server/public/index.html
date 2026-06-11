@@ -44,6 +44,7 @@
               <option value="category_crawl">Category crawl (walks the shop's category menus)</option>
               <option value="link_crawl">Crawl all links</option>
               <option value="spares_map">Spares map (products &rarr; spare part numbers)</option>
+              <option value="deva_spares">Deva (Shopify spares feed)</option>
             </select>
           </label>
           <label id="field-pattern">Search URL pattern
@@ -95,6 +96,9 @@
           <p>For linking spare-part codes to the product they belong to. Point it at a <em>category page</em>; it opens every product in that category (and its sub-categories) and records the codes from each product's Spares list against the product name and SKU. Results appear in the Spares tab.</p>
           <p class="guide-fields">Needs: <strong>Base URL = the category page</strong> (keep any <code>?product_tag=...</code> part). Prefixes and search pattern stay empty.<br>
           Example &mdash; Intatec showers: base <code>https://www.intatec.co.uk/product-category/plumbing-and-heating/showers/?product_tag=inspiration-showers</code></p>
+
+          <h4>Deva <span class="guide-tag">prices, no setup</span></h4>
+          <p>Built specifically for the Deva (Shopify) spares collections. It reads the shop's product feed directly &mdash; name, product code and price &mdash; from both spares collections, de-duplicated. Results appear in the Results tab like any other price site. No prefixes or pattern needed.</p>
 
           <h4>Eric spares <span class="guide-tag">upload a CSV</span></h4>
           <p>A separate tool on the <strong>Eric</strong> tab, not a site here. Upload a CSV of products, it looks each one up on the eric supplier feed and returns a CSV of every spare part (code, description, colour, stock). See that tab for details.</p>

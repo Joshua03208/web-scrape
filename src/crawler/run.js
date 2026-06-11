@@ -3,6 +3,7 @@ import { crawlPrefixSearch } from './prefixSearch.js';
 import { crawlLinkCrawl } from './linkCrawl.js';
 import { crawlCategoryCrawl } from './categoryCrawl.js';
 import { crawlSparesMap } from './sparesMap.js';
+import { crawlDevaSpares } from './devaSpares.js';
 import { loginAndGetCookies } from './login.js';
 
 const STRATEGIES = {
@@ -10,6 +11,7 @@ const STRATEGIES = {
   category_crawl: crawlCategoryCrawl,
   link_crawl: crawlLinkCrawl,
   spares_map: crawlSparesMap,
+  deva_spares: crawlDevaSpares,
 };
 
 async function defaultCrawlSite(site, { onProgress }) {
