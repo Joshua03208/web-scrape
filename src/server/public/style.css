@@ -236,6 +236,18 @@ select {
 #spares-table td:nth-child(1), #spares-table td:nth-child(3) { font-family: var(--mono); font-size: 0.83rem; }
 .nospare { color: var(--faint); font-style: italic; font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; }
 
+#eric-log {
+  font-family: var(--mono); font-size: 0.8rem; line-height: 1.55;
+  background: #0a0d11; color: var(--green);
+  border: 1px solid var(--border-soft); border-radius: var(--radius);
+  padding: 1rem 1.15rem; margin-top: 1rem;
+  min-height: 6rem; max-height: 22rem; overflow: auto; white-space: pre-wrap;
+}
+#eric-log:empty { display: none; }
+#eric-options { align-items: center; margin-top: 1rem; }
+#eric-options label.check { max-width: none; white-space: nowrap; }
+#eric-options > label:first-child { max-width: 220px; }
+
 /* sites guide */
 .guide {
   margin-top: 1.5rem; max-width: 720px;

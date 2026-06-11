@@ -71,6 +71,8 @@ export function openDb(path = DEFAULT_DB) {
   db.exec(SCHEMA);
   migrateSitesStrategyCheck(db);
   migrateShowerSparesNullable(db);
+  // in-memory dbs are for tests — seed only real (file) databases
+  if (path !== ':memory:') seedDefaultSites(db);
   return db;
 }
 
@@ -126,6 +128,34 @@ function migrateShowerSparesNullable(db) {
   `);
   db.exec('CREATE INDEX IF NOT EXISTS idx_spares ON shower_spares(spare)');
   db.pragma('foreign_keys = ON');
+}
+
+// Built-in sites. Seeded once on a fresh database (and re-added if missing) so
+// the known scrapers are always present without manual setup. An existing site
+// matching the same host is left untouched, so user tweaks are never overwritten.
+const DEFAULT_SITES = [
+  {
+    name: 'Central Services', base_url: 'https://central-servicesuk.co.uk/',
+    strategy: 'prefix_search',
+    search_url_pattern: 'index.php?route=product/search&search={query}&page={page}&limit=100',
+    prefixes: ['112.', '113.', '119.', '120.', '133.', '150.', '992.', '995.'],
+    enabled: 1, max_pages: 200,
+    host: 'central-servicesuk.co.uk',
+  },
+  {
+    name: 'Intatec Showers',
+    base_url: 'https://www.intatec.co.uk/product-category/plumbing-and-heating/showers/?product_tag=inspiration-showers',
+    strategy: 'spares_map', prefixes: [], enabled: 1, max_pages: 80,
+    host: 'intatec.co.uk',
+  },
+];
+
+export function seedDefaultSites(db) {
+  const existing = db.prepare('SELECT base_url FROM sites').all().map((r) => r.base_url);
+  for (const { host, ...site } of DEFAULT_SITES) {
+    if (existing.some((u) => u.includes(host))) continue;
+    createSite(db, site);
+  }
 }
 
 // --- shower spares (spares_map strategy) ---

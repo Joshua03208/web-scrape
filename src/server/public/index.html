@@ -17,60 +17,65 @@
       <button data-tab="results">Results</button>
       <button data-tab="compare">Compare</button>
       <button data-tab="spares">Spares</button>
+      <button data-tab="eric">Eric</button>
     </nav>
   </header>
 
   <main>
     <section id="tab-sites">
       <h2>Sites</h2>
+      <p class="hint">These scrapers are built in. Press <strong>Scrape</strong> to run one, <strong>Images</strong> to download its product photos, or <strong>Edit</strong> to adjust its settings.</p>
       <table id="sites-table">
         <thead><tr><th>On</th><th>Name</th><th>Strategy</th><th>Prefixes</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       <p id="images-status" class="hint"></p>
       <p class="hint"><a id="images-zip" href="/api/images/archive.zip" hidden>Download images (zip)</a></p>
-      <h3 id="site-form-title">Add site</h3>
-      <form id="site-form">
-        <input type="hidden" name="site_id">
-        <label>Name <input name="name" required></label>
-        <label>Base URL <input name="base_url" type="url" required placeholder="https://example.co.uk/"></label>
-        <label>Strategy
-          <select name="strategy">
-            <option value="prefix_search">Prefix search</option>
-            <option value="category_crawl">Category crawl (walks the shop's category menus)</option>
-            <option value="link_crawl">Crawl all links</option>
-            <option value="spares_map">Spares map (products &rarr; spare part numbers)</option>
-          </select>
-        </label>
-        <label id="field-pattern">Search URL pattern
-          <input name="search_url_pattern" placeholder="index.php?route=product/search&amp;search={query}&amp;page={page}">
-        </label>
-        <label id="field-prefixes">Prefixes (comma separated) <input name="prefixes" placeholder="112., 113., 133."></label>
-        <label>Max pages <input name="max_pages" type="number" value="200"></label>
-        <details class="login-details">
-          <summary>Dealer login (only for sites that need an account)</summary>
-          <fieldset>
-            <label>Login URL <input name="login_url"></label>
-            <label>Username <input name="username" autocomplete="off"></label>
-            <label>Password <input name="password" type="password" autocomplete="off"></label>
-          </fieldset>
-        </details>
-        <label class="check"><input type="checkbox" name="enabled" checked> Enabled</label>
-        <p id="site-form-error" class="form-error"></p>
-        <div class="form-actions">
-          <button type="submit">Save site</button>
-          <button type="button" id="site-form-reset">Clear</button>
-        </div>
-      </form>
+
+      <div id="site-editor" hidden>
+        <h3 id="site-form-title">Edit site</h3>
+        <form id="site-form">
+          <input type="hidden" name="site_id">
+          <label>Name <input name="name" required></label>
+          <label>Base URL <input name="base_url" type="url" required placeholder="https://example.co.uk/"></label>
+          <label>Strategy
+            <select name="strategy">
+              <option value="prefix_search">Prefix search</option>
+              <option value="category_crawl">Category crawl (walks the shop's category menus)</option>
+              <option value="link_crawl">Crawl all links</option>
+              <option value="spares_map">Spares map (products &rarr; spare part numbers)</option>
+            </select>
+          </label>
+          <label id="field-pattern">Search URL pattern
+            <input name="search_url_pattern" placeholder="index.php?route=product/search&amp;search={query}&amp;page={page}">
+          </label>
+          <label id="field-prefixes">Prefixes (comma separated) <input name="prefixes" placeholder="112., 113., 133."></label>
+          <label>Max pages <input name="max_pages" type="number" value="200"></label>
+          <details class="login-details">
+            <summary>Dealer login (only for sites that need an account)</summary>
+            <fieldset>
+              <label>Login URL <input name="login_url"></label>
+              <label>Username <input name="username" autocomplete="off"></label>
+              <label>Password <input name="password" type="password" autocomplete="off"></label>
+            </fieldset>
+          </details>
+          <label class="check"><input type="checkbox" name="enabled" checked> Enabled</label>
+          <p id="site-form-error" class="form-error"></p>
+          <div class="form-actions">
+            <button type="submit">Save changes</button>
+            <button type="button" id="site-form-reset">Cancel</button>
+          </div>
+        </form>
+      </div>
 
       <details class="panel guide">
-        <summary>Guide &mdash; strategies and how to add a site</summary>
+        <summary>Guide &mdash; what each scraper does</summary>
         <div class="guide-body">
-          <h4>How to add a site</h4>
+          <h4>How it works</h4>
           <ol>
-            <li>Fill in a name and the site's address, pick the strategy that fits (below), save.</li>
-            <li>Press the site's <strong>Scrape</strong> button to run it on its own, or <strong>Run now</strong> on the Run tab to scrape every enabled site.</li>
-            <li>Prices land in <strong>Results</strong>; spares mappings land in <strong>Spares</strong>.</li>
+            <li>The scrapers are built in &mdash; press a site's <strong>Scrape</strong> button to run it, or <strong>Run now</strong> on the Run tab to run every enabled site.</li>
+            <li>Prices land in <strong>Results</strong>; spares mappings land in <strong>Spares</strong>; product photos download via the <strong>Images</strong> button.</li>
+            <li><strong>Edit</strong> tweaks a site's settings (prefixes, max pages, etc.). The strategy reference below explains each type.</li>
           </ol>
 
           <h4>Prefix search <span class="guide-tag">best for price lists</span></h4>
@@ -90,6 +95,9 @@
           <p>For linking spare-part codes to the product they belong to. Point it at a <em>category page</em>; it opens every product in that category (and its sub-categories) and records the codes from each product's Spares list against the product name and SKU. Results appear in the Spares tab.</p>
           <p class="guide-fields">Needs: <strong>Base URL = the category page</strong> (keep any <code>?product_tag=...</code> part). Prefixes and search pattern stay empty.<br>
           Example &mdash; Intatec showers: base <code>https://www.intatec.co.uk/product-category/plumbing-and-heating/showers/?product_tag=inspiration-showers</code></p>
+
+          <h4>Eric spares <span class="guide-tag">upload a CSV</span></h4>
+          <p>A separate tool on the <strong>Eric</strong> tab, not a site here. Upload a CSV of products, it looks each one up on the eric supplier feed and returns a CSV of every spare part (code, description, colour, stock). See that tab for details.</p>
 
           <h4>Shared settings</h4>
           <p><strong>Max pages</strong> caps how many pages one run may fetch (politeness + runaway protection) &mdash; 200 suits big shops, 80 a single category. <strong>Dealer login</strong> is only for sites that show prices after signing in: give the login page address and your credentials, and the scraper signs in before crawling. <strong>Enabled</strong> controls whether Run now includes the site; the per-site Scrape button works regardless of other sites.</p>
@@ -200,6 +208,27 @@
         <thead><tr><th>Spare Part</th><th>Shower</th><th>Shower SKU</th><th>Site</th></tr></thead>
         <tbody></tbody>
       </table>
+    </section>
+
+    <section id="tab-eric" hidden>
+      <h2>Eric spares lookup</h2>
+      <p class="hint">Upload a CSV of products. Each one is looked up on the eric supplier feed and the spares it returns are collected into a downloadable CSV (Product, Spare Code, Description, Colour, Free Stock). Every input code is accounted for &mdash; products with none get a "NO SPARES FOUND" row.</p>
+      <div class="toolbar">
+        <label class="upload">Choose CSV
+          <input type="file" id="eric-file" accept=".csv" hidden>
+        </label>
+        <span id="eric-filename" class="hint"></span>
+      </div>
+      <div id="eric-options" class="epos-row" hidden>
+        <label>Code column
+          <select id="eric-column"></select>
+        </label>
+        <label class="check"><input type="checkbox" id="eric-suffix" checked> Use the code after the last " - "</label>
+        <button type="button" id="eric-run">Run lookup</button>
+      </div>
+      <p id="eric-status" class="hint"></p>
+      <p class="hint"><a id="eric-zip" href="/api/eric/result.csv" hidden>Download spares CSV</a></p>
+      <pre id="eric-log"></pre>
     </section>
   </main>
   <script src="app.js"></script>

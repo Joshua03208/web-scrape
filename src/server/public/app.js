@@ -29,6 +29,64 @@ document.querySelectorAll('nav button').forEach((btn) => {
   });
 });
 
+// --- eric spares lookup ---
+let ericFile = null;
+let ericTimer = null;
+
+$('#eric-file').addEventListener('change', async (e) => {
+  ericFile = e.target.files[0] || null;
+  $('#eric-options').hidden = true;
+  if (!ericFile) return;
+  $('#eric-filename').textContent = ericFile.name;
+  const form = new FormData();
+  form.append('file', ericFile);
+  try {
+    const { headers } = await api('/api/eric/preview', { method: 'POST', body: form });
+    $('#eric-column').innerHTML = headers.map((h) => `<option>${esc(h)}</option>`).join('');
+    // default to a Name-ish column (where the code usually lives)
+    const nameIdx = headers.findIndex((h) => /name/i.test(h));
+    if (nameIdx >= 0) $('#eric-column').selectedIndex = nameIdx;
+    $('#eric-options').hidden = false;
+  } catch (err) { $('#eric-status').textContent = `Could not read file: ${err.message}`; }
+});
+
+$('#eric-run').addEventListener('click', async () => {
+  if (!ericFile) return;
+  const form = new FormData();
+  form.append('file', ericFile);
+  form.append('column', $('#eric-column').value);
+  form.append('useSuffix', $('#eric-suffix').checked ? 'true' : 'false');
+  try {
+    const out = await api('/api/eric', { method: 'POST', body: form });
+    $('#eric-status').textContent = `Looking up ${out.codes} product codes...`;
+    $('#eric-zip').hidden = true;
+    if (!ericTimer) ericTimer = setInterval(pollEric, 1500);
+  } catch (err) { $('#eric-status').textContent = err.message; }
+});
+
+async function pollEric() {
+  try {
+    const s = await api('/api/eric/current');
+    if (s.log?.length) $('#eric-log').textContent = s.log.join('\n');
+    if (s.stats) {
+      $('#eric-status').textContent =
+        `${s.stats.done}/${s.stats.total} products — ${s.stats.spares} spares, ${s.stats.failures} failed`;
+    }
+    if (!s.running) {
+      clearInterval(ericTimer); ericTimer = null;
+      if (s.error) $('#eric-status').textContent += ` — ${s.error}`;
+      else if (s.stats) $('#eric-status').textContent += ' — finished.';
+      if (s.rowCount > 0) $('#eric-zip').hidden = false;
+    }
+  } catch { /* transient; keep polling */ }
+}
+
+// resume eric progress on refresh
+api('/api/eric/current').then((s) => {
+  if (s.running) { ericTimer = setInterval(pollEric, 1500); }
+  else if (s.stats) { pollEric(); }
+}).catch(() => {});
+
 // --- shower spares ---
 let allSpares = [];
 async function loadSpares() {
@@ -61,7 +119,7 @@ $('#spares-filter').addEventListener('input', renderSpares);
 async function loadSites() {
   const sites = await api('/api/sites');
   $('#sites-table tbody').innerHTML = sites.length === 0
-    ? '<tr><td class="empty" colspan="5">No sites yet — add one below.</td></tr>'
+    ? '<tr><td class="empty" colspan="5">No sites.</td></tr>'
     : sites.map((s) => `
     <tr>
       <td><span class="dot ${s.enabled ? 'on' : 'off'}"></span></td>
@@ -72,15 +130,10 @@ async function loadSites() {
         ${s.enabled ? `<button data-run="${s.id}">Scrape</button>` : ''}
         ${s.strategy !== 'spares_map' ? `<button data-img="${s.id}" title="Download product images for this site">Images</button>` : ''}
         <button data-edit="${s.id}">Edit</button>
-        <button data-del="${s.id}">Delete</button>
       </td>
     </tr>`).join('');
   $('#sites-table tbody').querySelectorAll('[data-edit]').forEach((b) =>
     b.addEventListener('click', () => fillForm(sites.find((s) => s.id === Number(b.dataset.edit)))));
-  $('#sites-table tbody').querySelectorAll('[data-del]').forEach((b) =>
-    b.addEventListener('click', async () => {
-      if (confirm('Delete this site?')) { await api(`/api/sites/${b.dataset.del}`, { method: 'DELETE' }); loadSites(); }
-    }));
   $('#sites-table tbody').querySelectorAll('[data-img]').forEach((b) =>
     b.addEventListener('click', async () => {
       try {
@@ -150,6 +203,7 @@ api('/api/images/current').then((s) => {
 // built-in HTMLFormElement properties and shadow inputs with those names.
 function fillForm(s) {
   const el = $('#site-form').elements;
+  $('#site-editor').hidden = false;
   $('#site-form-title').textContent = `Edit: ${s.name}`;
   el.site_id.value = s.id; el.name.value = s.name; el.base_url.value = s.base_url;
   el.strategy.value = s.strategy; el.search_url_pattern.value = s.search_url_pattern ?? '';
@@ -157,12 +211,13 @@ function fillForm(s) {
   el.login_url.value = s.login_url ?? ''; el.username.value = s.username ?? '';
   el.password.value = s.password ?? ''; el.enabled.checked = !!s.enabled;
   applyStrategyFields();
+  $('#site-editor').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 $('#site-form-reset').addEventListener('click', () => {
   $('#site-form').reset(); $('#site-form').elements.site_id.value = '';
-  $('#site-form-title').textContent = 'Add site';
-  applyStrategyFields();
+  $('#site-form-error').textContent = '';
+  $('#site-editor').hidden = true;
 });
 
 $('#site-form').addEventListener('submit', async (e) => {
@@ -177,10 +232,9 @@ $('#site-form').addEventListener('submit', async (e) => {
     password: el.password.value || null, enabled: el.enabled.checked ? 1 : 0,
   };
   try {
-    if (el.site_id.value) await api(`/api/sites/${el.site_id.value}`, {
+    // editing only — sites are built in, so this is always a PUT
+    await api(`/api/sites/${el.site_id.value}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    else await api('/api/sites', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     $('#site-form-error').textContent = '';
     $('#site-form-reset').click();
     loadSites();

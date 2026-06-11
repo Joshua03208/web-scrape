@@ -11,6 +11,9 @@ import {
 } from '../db.js';
 import { executeRun } from '../crawler/run.js';
 import { harvestImages, imagesRoot } from '../crawler/imageHarvest.js';
+import {
+  readCodesFromCsv, acquireEricSession, runEricLookup, ERIC_COLUMNS,
+} from '../crawler/ericSpares.js';
 import { existsSync } from 'node:fs';
 import archiver from 'archiver';
 import { normalisePartNumber } from '../extract/partNumber.js';
@@ -213,6 +216,57 @@ export function createApp(db, { runExecutor = executeRun } = {}) {
     }
   });
   app.get('/api/parts/missing', (req, res) => res.json(missingMyParts(db)));
+
+  // --- eric spares lookup (CSV in -> CSV out, nothing stored) ---
+  const eric = { running: false, stats: null, error: null, log: [], rows: [] };
+  // peek at an uploaded CSV's headers so the UI can offer a column picker
+  app.post('/api/eric/preview', uploadSingle, (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'file is required' });
+    try {
+      const { headers } = readCodesFromCsv(req.file.buffer, {});
+      res.json({ headers });
+    } catch (err) {
+      res.status(400).json({ error: `Could not read file: ${err.message}` });
+    }
+  });
+  app.post('/api/eric', uploadSingle, (req, res) => {
+    if (eric.running) return res.status(409).json({ error: 'An eric lookup is already running' });
+    if (!req.file) return res.status(400).json({ error: 'file is required' });
+    const column = req.body?.column || null;
+    const useSuffix = req.body?.useSuffix !== 'false';
+    let codes;
+    try {
+      codes = readCodesFromCsv(req.file.buffer, { column, useSuffix }).codes;
+    } catch (err) {
+      return res.status(400).json({ error: `Could not read file: ${err.message}` });
+    }
+    if (codes.length === 0) return res.status(400).json({ error: 'No product codes found in that column' });
+    eric.running = true; eric.stats = null; eric.error = null; eric.log = []; eric.rows = [];
+    Promise.resolve()
+      .then(async () => {
+        const cookie = await acquireEricSession(process.env.ERIC_SID ?? '');
+        return runEricLookup(codes, {
+          cookie,
+          onProgress: (p) => {
+            eric.stats = p;
+            if (p.line) { eric.log.push(p.line); if (eric.log.length > 400) eric.log.shift(); }
+          },
+        });
+      })
+      .then(({ rows, stats }) => { eric.rows = rows; eric.stats = stats; if (stats.aborted) eric.error = stats.aborted; })
+      .catch((err) => { eric.error = err.message; })
+      .finally(() => { eric.running = false; });
+    res.status(202).json({ started: true, codes: codes.length });
+  });
+  app.get('/api/eric/current', (req, res) => res.json({
+    running: eric.running, stats: eric.stats, error: eric.error,
+    log: eric.log.slice(-200), rowCount: eric.rows.length,
+  }));
+  app.get('/api/eric/result.csv', (req, res) => {
+    if (eric.rows.length === 0) return res.status(404).json({ error: 'No results yet' });
+    res.type('text/csv').attachment('eric-spares.csv')
+      .send('﻿' + rowsToCsv(eric.rows, ERIC_COLUMNS));
+  });
 
   // --- product image harvest ---
   const img = { running: false, siteName: null, stats: null, error: null };

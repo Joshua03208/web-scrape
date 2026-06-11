@@ -3,11 +3,28 @@ import {
   openDb, listSites, createSite, updateSite, deleteSite,
   createRun, finishRun, saveRunSiteSummary, listRuns,
   insertObservations, latestSnapshot, fullHistory,
-  replaceMyParts, missingMyParts,
+  replaceMyParts, missingMyParts, seedDefaultSites,
 } from '../src/db.js';
 
 let db;
 beforeEach(() => { db = openDb(':memory:'); });
+
+describe('seedDefaultSites', () => {
+  it('adds the built-in sites once and never duplicates', () => {
+    seedDefaultSites(db);
+    const after1 = listSites(db);
+    expect(after1.map((s) => s.name).sort()).toEqual(['Central Services', 'Intatec Showers']);
+    seedDefaultSites(db); // idempotent
+    expect(listSites(db)).toHaveLength(2);
+  });
+  it('does not overwrite an existing site on the same host', () => {
+    createSite(db, { ...SITE, name: 'My Tweaked CS', max_pages: 7 });
+    seedDefaultSites(db);
+    const cs = listSites(db).filter((s) => s.base_url.includes('central-servicesuk'));
+    expect(cs).toHaveLength(1);
+    expect(cs[0].name).toBe('My Tweaked CS'); // user config preserved
+  });
+});
 
 const SITE = {
   name: 'Central Services', base_url: 'https://central-servicesuk.co.uk/',

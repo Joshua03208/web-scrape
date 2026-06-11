@@ -57,7 +57,7 @@ describe('sites strategy migration', () => {
       name: 'Cats', base_url: 'https://y/', strategy: 'category_crawl', prefixes: ['133.'],
     });
     const sites = listSites(db);
-    expect(sites).toHaveLength(2);
+    // (openDb also seeds the built-in sites on a file db; assert on the ones we made)
     expect(sites.find((s) => s.id === id).strategy).toBe('category_crawl');
     expect(sites.find((s) => s.name === 'Old').strategy).toBe('prefix_search');
     db.close();
