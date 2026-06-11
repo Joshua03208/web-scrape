@@ -57,6 +57,16 @@ export function pickProductImages(urls, partNumber) {
   return dedupeImageUrls(own).slice(0, 10);
 }
 
+// A normal desktop Chrome UA — headless Chromium's default contains
+// "HeadlessChrome", which firewalls flag on sight.
+const REAL_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+// Pacing between products. Keep it slow and jittered so a bulk run stays well
+// under the request-rate a firewall would flag. Override via IMAGE_DELAY_MS.
+const BASE_DELAY = Number(process.env.IMAGE_DELAY_MS) || 3000;
+const jitteredDelay = () => BASE_DELAY + Math.floor(Math.random() * 1500);
+
 // Visits each scraped product page for a site and saves its gallery images to
 // data/images/<part number>/. Parts that already have a folder are skipped, so
 // re-runs only fetch new products.
@@ -69,7 +79,22 @@ export async function harvestImages(db, site, { prefix = '', onProgress = () => 
   let abortReason = null;
 
   const browser = await chromium.launch();
-  const ctx = await browser.newContext();
+  const ctx = await browser.newContext({
+    userAgent: REAL_UA,
+    extraHTTPHeaders: { 'Accept-Language': 'en-GB,en;q=0.9' },
+  });
+  // Only the page HTML is needed to find image URLs (the chosen product photos
+  // are fetched separately). Block every heavy sub-resource so each product is
+  // ~1 request instead of ~50 — the single biggest thing that avoids tripping
+  // the firewall on a bulk run.
+  await ctx.route('**/*', (route) => {
+    const type = route.request().resourceType();
+    if (type === 'document' || type === 'script' || type === 'xhr' || type === 'fetch') {
+      route.continue();
+    } else {
+      route.abort();
+    }
+  });
 
   async function worker() {
     const page = await ctx.newPage();
@@ -125,8 +150,8 @@ export async function harvestImages(db, site, { prefix = '', onProgress = () => 
       } finally {
         stats.done += 1;
         try { onProgress({ ...stats }); } catch { /* progress is best-effort */ }
-        // bulk job, no rush: be gentle so the site doesn't rate-limit us
-        await page.waitForTimeout(900);
+        // bulk job, no rush: slow + jittered so the site doesn't rate-limit us
+        await page.waitForTimeout(jitteredDelay());
       }
     }
     await page.close();
