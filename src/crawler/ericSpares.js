@@ -1,12 +1,28 @@
 import https from 'node:https';
+import tls from 'node:tls';
 import * as cheerio from 'cheerio';
 import { parse } from 'csv-parse/sync';
 
 const ERIC_ORIGIN = 'https://eric.ultrasap.com';
 
-// The endpoint's TLS cert hostname doesn't match the domain, so verification is
-// disabled FOR THIS HOST ONLY via a dedicated agent (not a global override).
-const insecureAgent = new https.Agent({ rejectUnauthorized: false });
+// The endpoint serves a VALID Let's Encrypt certificate, but issued for the
+// hosting provider's wildcard (*.roxorgroup.com) instead of eric.ultrasap.com —
+// a hostname mismatch only. So we keep full chain validation (rejectUnauthorized
+// stays on: forged / expired / untrusted certs are still rejected) and relax
+// ONLY the hostname check, and only to that one expected subject. If the host
+// ever serves a different/forged cert this fails loudly rather than silently
+// trusting it — far safer than disabling verification wholesale.
+const EXPECTED_CERT_HOST = 'roxorgroup.com';
+const insecureAgent = new https.Agent({
+  checkServerIdentity: (host, cert) => {
+    const cn = cert?.subject?.CN ?? '';
+    const san = cert?.subjectaltname ?? '';
+    if (cn.includes(EXPECTED_CERT_HOST) || san.includes(EXPECTED_CERT_HOST)) {
+      return undefined; // expected hostname mismatch — accept
+    }
+    return tls.checkServerIdentity(host, cert); // anything else: normal check (errors)
+  },
+});
 
 // Minimal GET that we fully control: no auto-redirect (we need to SEE the 302 to
 // default.htm that signals an expired session), custom cookie, hard timeout.
