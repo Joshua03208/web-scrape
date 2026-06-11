@@ -9,17 +9,16 @@ const ERIC_ORIGIN = 'https://eric.ultrasap.com';
 // hosting provider's wildcard (*.roxorgroup.com) instead of eric.ultrasap.com —
 // a hostname mismatch only. So we keep full chain validation (rejectUnauthorized
 // stays on: forged / expired / untrusted certs are still rejected) and relax
-// ONLY the hostname check, and only to that one expected subject. If the host
-// ever serves a different/forged cert this fails loudly rather than silently
-// trusting it — far safer than disabling verification wholesale.
-const EXPECTED_CERT_HOST = 'roxorgroup.com';
+// ONLY the hostname check — and only when the cert's SAN list contains EXACTLY
+// the one expected entry. An exact match (not substring) rejects look-alikes
+// such as evil-roxorgroup.com or roxorgroup.com.attacker.com. Anything else
+// falls through to the normal identity check and fails loudly.
+const EXPECTED_SAN = '*.roxorgroup.com';
+const certSanEntries = (cert) =>
+  (cert?.subjectaltname ?? '').split(',').map((s) => s.trim().replace(/^DNS:/i, ''));
 const insecureAgent = new https.Agent({
   checkServerIdentity: (host, cert) => {
-    const cn = cert?.subject?.CN ?? '';
-    const san = cert?.subjectaltname ?? '';
-    if (cn.includes(EXPECTED_CERT_HOST) || san.includes(EXPECTED_CERT_HOST)) {
-      return undefined; // expected hostname mismatch — accept
-    }
+    if (certSanEntries(cert).includes(EXPECTED_SAN)) return undefined; // expected, accept
     return tls.checkServerIdentity(host, cert); // anything else: normal check (errors)
   },
 });
